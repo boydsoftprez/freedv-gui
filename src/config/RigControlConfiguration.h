@@ -44,6 +44,10 @@ public:
     ConfigurationDataElement<bool> hamlibForceRTSOn;
     ConfigurationDataElement<bool> hamlibForceDTROn;
     
+    ConfigurationDataElement<bool> useTCI;
+    ConfigurationDataElement<wxString> tciHostname;
+    ConfigurationDataElement<unsigned int> tciPort;
+    
     ConfigurationDataElement<bool> useSerialPTT;
     ConfigurationDataElement<wxString> serialPTTPort;
     ConfigurationDataElement<bool> serialPTTUseRTS;

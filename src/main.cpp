@@ -2523,6 +2523,10 @@ void MainFrame::performFreeDVOn_()
                 {
                     OpenHamlibRig();
                 }
+                else if (wxGetApp().appConfiguration.rigControlConfiguration.useTCI)
+                {
+                    OpenTciRig();
+                }
                 else if (wxGetApp().appConfiguration.rigControlConfiguration.useSerialPTT) 
                 {
                     OpenSerialPort();
