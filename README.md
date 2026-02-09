@@ -5,6 +5,7 @@ FreeDV now supports full audio TX/RX via the TCI protocol in this version/hack, 
 This is an "alpha" so expect buggs...
 
 ### Key Features
+- **TCI Frequency and Mode Control:** Frequency control over TCI both ways.
 - **TCI Audio TX/RX:** Transmit and receive digital voice over the TCI network interface—no soundcard cabling required.
 - **Modular Audio Configuration:** Configure only your microphone and speaker; radio audio is handled by TCI.
 - **Protocol Compliance:** Uses 32-bit float, stereo, 48kHz audio streams as per TCI specification.
@@ -18,5 +19,6 @@ This is an "alpha" so expect buggs...
    - **Transmit → Input from mic:** Your microphone
    - **Transmit → Input to radio:** `none`
 
+...will try to add IQ-data over TCI next.
 
 **Speciall thanks to Owen, SA0LSD for the help of testing this!**
