@@ -673,7 +673,13 @@ void TxRxThread::clearFifos_() FREEDV_NONBLOCKING
     if (m_tx)
     {
         cbData->outfifo1->reset();
-        cbData->infifo2->reset();
+        // NOTE: Do NOT reset infifo2 when entering TX mode!
+        // For TCI audio mode, the microphone runs continuously and buffers audio
+        // before PTT is pressed. This buffered audio is valid voice data that
+        // should be transmitted, not discarded.
+        // Clearing infifo2 here caused TX to encode silence because all the
+        // accumulated microphone audio was deleted when entering TX mode.
+        // cbData->infifo2->reset();  // ← REMOVED - preserves buffered mic audio
     }
     else
     {
@@ -702,17 +708,31 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
     //
 
     bool tmpHalfDuplex = g_half_duplex.load(std::memory_order_acquire);
-    if (((g_nSoundCards == 2) && ((tmpHalfDuplex && g_tx.load(std::memory_order_acquire)) || !tmpHalfDuplex || g_voice_keyer_tx.load(std::memory_order_acquire) || g_recVoiceKeyerFile || g_recFileFromMic))) {        
+    bool tmpTx = g_tx.load(std::memory_order_acquire);
+    static int txProcLogCount = 0;
+    if (txProcLogCount++ < 5) {
+        fprintf(stderr, "TX Processing check: g_nSoundCards=%d, halfDuplex=%d, g_tx=%d\n",
+                g_nSoundCards, tmpHalfDuplex, tmpTx);
+        fflush(stderr);
+    }
+    if (((g_nSoundCards == 2) && ((tmpHalfDuplex && tmpTx) || !tmpHalfDuplex || g_voice_keyer_tx.load(std::memory_order_acquire) || g_recVoiceKeyerFile || g_recFileFromMic))) {        
         if (deferReset_)
         {
             // We just entered TX from RX.
-            // Reset pipeline and wipe anything in the FIFO.
+            // For RADE mode, do NOT reset the pipeline as this would reset the
+            // feature accumulator (featureListIdx_), requiring ~1.5 seconds to
+            // re-accumulate 432 features before encoding can begin. This delay
+            // causes outfifo1 to stay empty while TX_CHRONO drains it, sending zeros.
+            // Instead, only reset outfifo1 to clear any stale output samples.
+            // The accumulated features are still valid and encoding can start immediately.
             deferReset_ = false;
-            pipeline_->reset();
-            clearFifos_();
 
-            // return out and begin processing on the next loop
-            return;
+            // Only reset output FIFO, not the entire pipeline.
+            // The accumulated RADE features (featureListIdx_) are still valid
+            // and encoding can start immediately; a full pipeline_->reset()
+            // would require ~1.5 seconds to re-accumulate 432 features.
+            paCallBackData* cbData = g_rxUserdata;
+            cbData->outfifo1->reset();
         }
 
         // This while loop locks the modulator to the sample rate of
@@ -758,6 +778,15 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
             // There may be recorded audio left to encode while ending TX. To handle this,
             // we keep reading from the FIFO until we have less than nsam_in_48 samples available.
             auto inputPtr = inputSamples_.get();
+            
+            static int txReadCount = 0;
+            if (txReadCount++ < 10)
+            {
+                fprintf(stderr, "TX thread: trying to read %d samples from infifo2 (used=%d)\n",
+                        nsam_in_48, cbData->infifo2->numUsed());
+                fflush(stderr);
+            }
+            
             int nread = cbData->infifo2->read(inputPtr, nsam_in_48);            
             if (nread != 0)
             {
@@ -798,6 +827,14 @@ void TxRxThread::txProcessing_(IRealtimeHelper* helper) FREEDV_NONBLOCKING
             }
             
             auto outputSamples = pipeline_->execute(inputPtr, nsam_in_48, &nout);
+            
+            static int pipelineLogCount = 0;
+            if (pipelineLogCount++ < 20)
+            {
+                fprintf(stderr, "TX pipeline: nread=%d, outputSamples=%p, nout=%d, outfifo1_free=%d\n",
+                        nread, outputSamples, nout, cbData->outfifo1->numFree());
+                fflush(stderr);
+            }
             
             if (g_dump_fifo_state) {
                 FREEDV_BEGIN_VERIFIED_SAFE

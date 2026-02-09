@@ -24,6 +24,8 @@
 #include "rig_control/omnirig/OmniRigController.h"
 #endif // defined(WIN32)
 
+#include "rig_control/TciRigController.h"
+
 #include "codec2_fdmdv.h" // for FDMDV_FCENTRE
 
 extern int g_mode;
@@ -1381,6 +1383,24 @@ void MainFrame::togglePTT(void) {
     }
 
     auto newTx = m_btnTogPTT->GetValue();
+    
+    // For TCI mode, set g_tx=true BEFORE sending PTT command so TX thread starts encoding
+    // immediately. TCI servers (like eesdr3) send TX_CHRONO requests as soon as PTT is keyed,
+    // unlike traditional rigs which wait for the PTT relay to settle.
+    bool isTciMode = false;
+    if (wxGetApp().rigPttController != nullptr)
+    {
+        auto tciRig = std::dynamic_pointer_cast<TciRigController>(wxGetApp().rigPttController);
+        isTciMode = (tciRig != nullptr);
+    }
+    
+    if (newTx && isTciMode)
+    {
+        fprintf(stderr, "\n=== TCI PTT: Setting g_tx=true BEFORE PTT command ===\n");
+        fflush(stderr);
+        g_tx.store(true, std::memory_order_release);
+    }
+    
     if (wxGetApp().rigPttController != nullptr && wxGetApp().rigPttController->isConnected()) 
     {
         wxGetApp().rigPttController->ptt(newTx);
@@ -1439,9 +1459,16 @@ void MainFrame::togglePTT(void) {
         }
 
         // g_tx governs when audio actually goes out during TX, so don't set to true until
-        // after the delay occurs.
-        g_tx.store(true, std::memory_order_release);
-                
+        // after the delay occurs. (Note: For TCI mode, g_tx is already set above before PTT command)
+        if (!isTciMode)
+        {
+            g_tx.store(true, std::memory_order_release);
+        }
+
+        m_sliderMicSpkrLevel->SetValue(wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB * 10);
+        wxString fmtString = wxString::Format(MIC_SPKR_LEVEL_FORMAT_STR, wxNumberFormatter::ToString((double)wxGetApp().appConfiguration.filterConfiguration.micInChannel.volInDB, 1), DECIBEL_STR);
+        m_txtMicSpkrLevelNum->SetLabel(fmtString);
+
         if (wxGetApp().m_pttInSerialPort)
         {
             wxGetApp().m_pttInSerialPort->suspendChanges(false);
