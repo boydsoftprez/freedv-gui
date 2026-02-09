@@ -18,4 +18,5 @@ This is an "alpha" so expect buggs...
    - **Transmit → Input from mic:** Your microphone
    - **Transmit → Input to radio:** `none`
 
----
+
+**Speciall thanks to Owen, SA0LSD for the help of testing this!**
