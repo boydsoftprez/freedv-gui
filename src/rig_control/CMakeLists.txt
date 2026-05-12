@@ -36,4 +36,18 @@ if(UNITTEST)
     # Individual DefineRigControlUnitTest(...) calls live alongside their
     # test source files (added by Tasks 5, 7, 10 of the TCI port plan).
     DefineRigControlUnitTest(TciProtocolTest)
+
+    # TCI WS roundtrip smoke test (multi-source: test driver + mock server
+    # fixture).  Uses an explicit add_executable because DefineRigControlUnitTest
+    # only accepts a single source file.
+    add_executable(TciWebSocketClientTest
+        test/TciWebSocketClientTest.cpp
+        test/mock_tci_server.cpp)
+    target_link_libraries(TciWebSocketClientTest PRIVATE fdv_rig_control fdv_util)
+    target_include_directories(TciWebSocketClientTest PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_BINARY_DIR}/..)
+    add_test(NAME rig_control_TciWebSocketClientTest
+             COMMAND ${CMAKE_CURRENT_BINARY_DIR}/TciWebSocketClientTest)
 endif(UNITTEST)
