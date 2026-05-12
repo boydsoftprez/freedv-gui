@@ -420,6 +420,19 @@ void TciRigController::handleTrxEcho_(bool moxOn)
 {
     if (moxOn)
     {
+        // Idempotency: a `trx:0,true` echo that arrives while we are already
+        // in a known MOX state is a server state-sync push (TCI servers
+        // commonly re-broadcast state after audio_start, mode change, other
+        // client connect, etc.). It is NOT a new ownership signal. Without
+        // this guard, the second echo lands in the else-branch below and
+        // mis-credits the PTT to "another client", which closes our TX gate
+        // and the radio drops MOX after a brief moment.
+        if (our_ptt_active_.load() || other_client_mox_.load())
+        {
+            pttState_.store(true);
+            return;
+        }
+
         if (pending_ptt_request_.load())
         {
             // The server echoed MOX-on while we had a pending request:

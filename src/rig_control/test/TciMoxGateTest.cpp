@@ -297,6 +297,70 @@ bool test_our_ptt_local_release_clears_state()
 }
 
 // ---------------------------------------------------------------------------
+// Test 6: Redundant trx:0,true echo from server while we are already
+//         transmitting must NOT be mis-credited to "another client".
+//
+// Bug history: an early version of handleTrxEcho_ consumed
+// pending_ptt_request_ on the first MOX-on echo, so the next echo (a
+// server state-sync push, which TCI servers commonly emit after
+// audio_start / mode change / other-client connect) fell through to
+// the "another source keyed the radio" branch.  That set
+// other_client_mox_=true and closed maySendTxAudio(), causing the radio
+// to drop MOX after a brief moment because the audio stream stopped.
+//
+// Flow:
+//   tst_armPendingPtt() + tst_injectTrxEcho(true)
+//                                          => our_ptt_active_=true, maySendTxAudio=true
+//   tst_injectTrxEcho(true)   (repeat)     => MUST remain our_ptt_active_=true,
+//                                             other_client_mox_=false, maySendTxAudio=true
+//   tst_injectTrxEcho(true)   (third)      => same; idempotent
+// ---------------------------------------------------------------------------
+bool test_redundant_mox_echo_stays_ours()
+{
+    auto ctrl = makeController();
+
+    ctrl->tst_armPendingPtt();
+    ctrl->tst_injectTrxEcho(true);
+
+    if (!ctrl->tst_ourPttActive() || !ctrl->tst_maySendTxAudio() ||
+        ctrl->tst_otherClientMox())
+    {
+        std::cerr << "[first echo should claim our PTT]...";
+        return false;
+    }
+
+    // Server pushes the SAME state again (idempotent broadcast).
+    ctrl->tst_injectTrxEcho(true);
+
+    if (!ctrl->tst_ourPttActive())
+    {
+        std::cerr << "[our_ptt_active_ should remain true after redundant echo]...";
+        return false;
+    }
+    if (ctrl->tst_otherClientMox())
+    {
+        std::cerr << "[other_client_mox_ should NOT be set by redundant echo]...";
+        return false;
+    }
+    if (!ctrl->tst_maySendTxAudio())
+    {
+        std::cerr << "[maySendTxAudio() should remain true on redundant echo]...";
+        return false;
+    }
+
+    // And a third time.
+    ctrl->tst_injectTrxEcho(true);
+
+    if (!ctrl->tst_maySendTxAudio() || ctrl->tst_otherClientMox())
+    {
+        std::cerr << "[state should still be ours after third echo]...";
+        return false;
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 int main()
@@ -306,6 +370,7 @@ int main()
     TEST_CASE(test_other_client_mox_blocks_tx);
     TEST_CASE(test_mox_off_clears_state);
     TEST_CASE(test_our_ptt_local_release_clears_state);
+    TEST_CASE(test_redundant_mox_echo_stays_ours);
 
     return 0;
 }
