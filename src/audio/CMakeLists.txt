@@ -51,6 +51,21 @@ endif()
 
 target_compile_options(fdv_audio PRIVATE ${WARNINGS_AS_ERRORS_FLAGS})
 
+if(UNITTEST)
+    macro(DefineAudioUnitTest utName)
+        add_executable(${utName} test/${utName}.cpp)
+        target_link_libraries(${utName} PRIVATE fdv_audio fdv_rig_control fdv_util)
+        target_include_directories(${utName} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+            ${CMAKE_CURRENT_BINARY_DIR}/..)
+        add_test(NAME audio_${utName} COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${utName})
+    endmacro()
+
+    # Individual DefineAudioUnitTest(...) calls live alongside their
+    # test source files (added by Tasks 6, 15 of the TCI port plan).
+endif(UNITTEST)
+
 if(BOOTSTRAP_WXWIDGETS)
     add_dependencies(fdv_audio wx::core wx::base wx::aui wx::html wx::net wx::adv wx::propgrid wx::xrc)
     target_compile_definitions(fdv_audio PRIVATE ${WXBUILD_BUILD_DEFS})

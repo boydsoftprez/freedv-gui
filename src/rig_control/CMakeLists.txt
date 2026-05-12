@@ -21,3 +21,18 @@ target_link_libraries(fdv_rig_control PUBLIC fdv_rig_control_omnirig)
 endif(WIN32)
 
 target_compile_options(fdv_rig_control PRIVATE ${WARNINGS_AS_ERRORS_FLAGS})
+
+if(UNITTEST)
+    macro(DefineRigControlUnitTest utName)
+        add_executable(${utName} test/${utName}.cpp)
+        target_link_libraries(${utName} PRIVATE fdv_rig_control fdv_util)
+        target_include_directories(${utName} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+            ${CMAKE_CURRENT_BINARY_DIR}/..)
+        add_test(NAME rig_control_${utName} COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${utName})
+    endmacro()
+
+    # Individual DefineRigControlUnitTest(...) calls live alongside their
+    # test source files (added by Tasks 5, 7, 10 of the TCI port plan).
+endif(UNITTEST)
