@@ -297,7 +297,7 @@ Transitions:
 
 TX audio gate: `may_send = our_ptt_active_ && !other_client_mox_`.
 
-Edge case: hardware PTT (foot switch) fires WHILE `pending_ptt_request_` is set but before our echo arrives. The server may emit the foot-switch MOX echo before our own. The race: we receive `trx:0,true;` and credit it to ourselves. Mitigation: include a per-request token in our SET (`tci`-server-specific param mentioned in the fork: `Calling sendCommand_("trx", [0, true, tci])` — see `TCI_TX_TESTING_GUIDE.md:752`). If the server echoes the token in some commands, use it as the disambiguator. If not, accept a small false-positive window (sub-100 ms) as acceptable v1 behavior; document.
+Edge case: hardware PTT (foot switch) fires WHILE `pending_ptt_request_` is set but before our echo arrives. The server may emit the foot-switch MOX echo before our own. The race: we receive `trx:0,true;` and credit it to ourselves. Mitigation: include a per-request token in our SET (`tci`-server-specific param mentioned in the fork: `Calling sendCommand_("trx", [0, true, tci])`: see `TCI_TX_TESTING_GUIDE.md:752`). If the server echoes the token in some commands, use it as the disambiguator. If not, accept a small false-positive window (sub-100 ms) as acceptable v1 behavior; document.
 
 ## 12. Fork-documented bugs to fix
 

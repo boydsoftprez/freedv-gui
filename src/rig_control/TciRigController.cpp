@@ -541,8 +541,10 @@ void TciRigController::onWsConnected_()
     connected_ = true;
     setStatus_(ConnectionStatus::Connected);
 
-    // Request audio sample rate from server.
-    sendCommand_("audio_sample_rate", {std::to_string(48000)});
+    // Canonical TCI command per ExpertSDR3 spec is "audio_samplerate" (one
+    // word) with args {trx, rate}. The fork shipped "audio_sample_rate" + a
+    // single-arg payload, which ExpertSDR3 tolerates but ThetisTCI rejects.
+    sendCommand_("audio_samplerate", {std::to_string(trx_), std::to_string(48000)});
 
     // Set RX filter bandwidth wide enough for FreeDV/RADE
     // RADE uses ~600-2350 Hz, so 100-2700 Hz gives good margin

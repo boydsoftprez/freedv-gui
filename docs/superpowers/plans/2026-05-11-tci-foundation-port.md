@@ -1648,7 +1648,7 @@ Write to `src/rig_control/TciWebSocketClient.cpp`:
 // Purpose:         (see header)
 // Authors:         Tomas Ostojic (original POSIX impl)
 //                  J.J. Boyd     (websocketpp + TcpConnectionHandler port)
-// License:         (see header — LGPL 2.1+)
+// License:         (see header: LGPL 2.1+)
 //=========================================================================
 
 #include "TciWebSocketClient.h"
@@ -2723,7 +2723,7 @@ Run this checklist before declaring the plan complete.
    - Spec §16 Success criteria: validated in Tasks 13, 19, 20.
    - Spec §17 References: no task; references are in the spec.
 
-2. **Placeholder scan**: searched plan for "TODO", "TBD", "implement later", "fill in details", "handle edge cases", "add appropriate error handling", "similar to Task N" — only legitimate uses are "TBD" rows in the bench matrix that the user fills in by hand.
+2. **Placeholder scan**: searched plan for "TODO", "TBD", "implement later", "fill in details", "handle edge cases", "add appropriate error handling", "similar to Task N": only legitimate uses are "TBD" rows in the bench matrix that the user fills in by hand.
 
 3. **Type / name consistency**:
    - `pending_ptt_request_` / `our_ptt_active_` / `other_client_mox_` used consistently throughout Phase D.

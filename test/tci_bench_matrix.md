@@ -76,12 +76,12 @@ When updating a row:
 
 ## Out of scope for v1
 
-- IQ stream support (`iq_start` / `iq_stop`) — no panadapter in freedv-gui.
-- Multi-TRX / multi-channel — single TRX 0 only.
-- TCI auto-discovery — no spec; manual URL entry.
-- Clock-drift handling — accepted v1 limitation (~1 sample / 24 sec at
+- IQ stream support (`iq_start` / `iq_stop`): no panadapter in freedv-gui.
+- Multi-TRX / multi-channel: single TRX 0 only.
+- TCI auto-discovery: no spec; manual URL entry.
+- Clock-drift handling: accepted v1 limitation (~1 sample / 24 sec at
   typical 10 ppm crystal mismatch; manifests as decoder resync after
   ~40 minutes of QSO).
-- Sub-100 ms multi-client MOX false-positive window — accepted v1 limitation
+- Sub-100 ms multi-client MOX false-positive window: accepted v1 limitation
   (closes after we know whether the TCI server echoes a per-request token
   in `trx` responses).

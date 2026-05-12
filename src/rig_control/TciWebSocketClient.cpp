@@ -75,8 +75,11 @@ namespace tci
         // Return true as long as we successfully kicked off the TCP
         // attempt; the WS handshake then completes asynchronously and
         // setOnConnected() fires on the worker thread.
+        // enableReconnect = true so TcpConnectionHandler's RECONNECT_INTERVAL_MS
+        // (5 sec) retry loop fires on drop. TciRigController::onWsConnected_
+        // replays the cached state once each reconnect handshake completes.
         TcpConnectionHandler::connect(hostname.c_str(), port,
-                                      /* enableReconnect = */ false);
+                                      /* enableReconnect = */ true);
         return true;
     }
 
