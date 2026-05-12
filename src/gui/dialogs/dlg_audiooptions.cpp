@@ -466,12 +466,14 @@ int AudioOptsDialog::ExchangeData(int inout)
                                       m_listCtrlRxOutDevices, 
                                       wxGetApp().appConfiguration.audioConfiguration.soundCard1Out.deviceName);
 
-            if ((m_textCtrlRxIn->GetValue() != "none") && (m_textCtrlRxOut->GetValue() != "none")) {
-                // Build sample rate dropdown lists
+            // Build sample rate dropdown lists independently for each device.
+            // Avoids skipping a valid device when the other slot is "none".
+            if (m_textCtrlRxIn->GetValue() != "none") {
                 buildListOfSupportedSampleRates(m_cbSampleRateRxIn, wxGetApp().appConfiguration.audioConfiguration.soundCard1In.deviceName, AUDIO_IN);
-                buildListOfSupportedSampleRates(m_cbSampleRateRxOut, wxGetApp().appConfiguration.audioConfiguration.soundCard1Out.deviceName, AUDIO_OUT);
-                
                 m_cbSampleRateRxIn->SetValue(wxString::Format(wxT("%i"), wxGetApp().appConfiguration.audioConfiguration.soundCard1In.sampleRate.get()));
+            }
+            if (m_textCtrlRxOut->GetValue() != "none") {
+                buildListOfSupportedSampleRates(m_cbSampleRateRxOut, wxGetApp().appConfiguration.audioConfiguration.soundCard1Out.deviceName, AUDIO_OUT);
                 m_cbSampleRateRxOut->SetValue(wxString::Format(wxT("%i"), wxGetApp().appConfiguration.audioConfiguration.soundCard1Out.sampleRate.get()));
             }
 
@@ -539,6 +541,13 @@ int AudioOptsDialog::ExchangeData(int inout)
                 m_cbSampleRateRxOut->SetValue(wxString::Format(wxT("%i"), rxOutRate));
             }
         }
+
+        // Set initial test-button state based on current device selection.
+        // Buttons for "none" slots (e.g. TCI audio mode with TX Out = "none") start disabled.
+        m_btnRxInTest->Enable(m_textCtrlRxIn->GetValue() != "none");
+        m_btnRxOutTest->Enable(m_textCtrlRxOut->GetValue() != "none");
+        m_btnTxInTest->Enable(m_textCtrlTxIn->GetValue() != "none");
+        m_btnTxOutTest->Enable(m_textCtrlTxOut->GetValue() != "none");
     }
 
     if(inout == EXCHANGE_DATA_OUT)
@@ -842,11 +851,12 @@ void AudioOptsDialog::OnDeviceSelect(wxComboBox *cbSampleRate,
 //-------------------------------------------------------------------------
 void AudioOptsDialog::OnRxInDeviceSelect(wxListEvent& evt)
 {
-    OnDeviceSelect(m_cbSampleRateRxIn, 
-                   m_textCtrlRxIn, 
-                   m_listCtrlRxInDevices, 
+    OnDeviceSelect(m_cbSampleRateRxIn,
+                   m_textCtrlRxIn,
+                   m_listCtrlRxInDevices,
                    evt.GetIndex(),
                    AUDIO_IN);
+    m_btnRxInTest->Enable(m_textCtrlRxIn->GetValue() != "none");
 }
 
 //-------------------------------------------------------------------------
@@ -854,11 +864,12 @@ void AudioOptsDialog::OnRxInDeviceSelect(wxListEvent& evt)
 //-------------------------------------------------------------------------
 void AudioOptsDialog::OnRxOutDeviceSelect(wxListEvent& evt)
 {
-    OnDeviceSelect(m_cbSampleRateRxOut, 
-                   m_textCtrlRxOut, 
-                   m_listCtrlRxOutDevices, 
+    OnDeviceSelect(m_cbSampleRateRxOut,
+                   m_textCtrlRxOut,
+                   m_listCtrlRxOutDevices,
                    evt.GetIndex(),
                    AUDIO_OUT);
+    m_btnRxOutTest->Enable(m_textCtrlRxOut->GetValue() != "none");
 }
 
 //-------------------------------------------------------------------------
@@ -866,11 +877,12 @@ void AudioOptsDialog::OnRxOutDeviceSelect(wxListEvent& evt)
 //-------------------------------------------------------------------------
 void AudioOptsDialog::OnTxInDeviceSelect(wxListEvent& evt)
 {
-    OnDeviceSelect(m_cbSampleRateTxIn, 
-                   m_textCtrlTxIn, 
-                   m_listCtrlTxInDevices, 
+    OnDeviceSelect(m_cbSampleRateTxIn,
+                   m_textCtrlTxIn,
+                   m_listCtrlTxInDevices,
                    evt.GetIndex(),
                    AUDIO_IN);
+    m_btnTxInTest->Enable(m_textCtrlTxIn->GetValue() != "none");
 }
 
 //-------------------------------------------------------------------------
@@ -878,11 +890,12 @@ void AudioOptsDialog::OnTxInDeviceSelect(wxListEvent& evt)
 //-------------------------------------------------------------------------
 void AudioOptsDialog::OnTxOutDeviceSelect(wxListEvent& evt)
 {
-    OnDeviceSelect(m_cbSampleRateTxOut, 
-                   m_textCtrlTxOut, 
-                   m_listCtrlTxOutDevices, 
+    OnDeviceSelect(m_cbSampleRateTxOut,
+                   m_textCtrlTxOut,
+                   m_listCtrlTxOutDevices,
                    evt.GetIndex(),
                    AUDIO_OUT);
+    m_btnTxOutTest->Enable(m_textCtrlTxOut->GetValue() != "none");
 }
 
 void AudioOptsDialog::UpdatePlot(PlotScalar *plotScalar)
@@ -1015,13 +1028,15 @@ void AudioOptsDialog::plotDeviceInputForAFewSecs(wxString const& devName, PlotSc
             delete m_audioPlotThread;
             m_audioPlotThread = nullptr;
 
-            m_btnRxInTest->Enable(true);
-            m_btnRxOutTest->Enable(true);
-            m_btnTxInTest->Enable(true);
-            m_btnTxOutTest->Enable(true);
+            // Re-enable each button only if its device slot is not "none".
+            // This preserves disabled state for "none" slots (e.g. TCI audio mode).
+            m_btnRxInTest->Enable(m_textCtrlRxIn->GetValue() != "none");
+            m_btnRxOutTest->Enable(m_textCtrlRxOut->GetValue() != "none");
+            m_btnTxInTest->Enable(m_textCtrlTxIn->GetValue() != "none");
+            m_btnTxOutTest->Enable(m_textCtrlTxOut->GetValue() != "none");
         });
     }, devName, ps);
-    
+
 }
 
 //-------------------------------------------------------------------------
@@ -1155,10 +1170,12 @@ void AudioOptsDialog::plotDeviceOutputForAFewSecs(wxString const& devName, PlotS
             delete m_audioPlotThread;
             m_audioPlotThread = nullptr;
 
-            m_btnRxInTest->Enable(true);
-            m_btnRxOutTest->Enable(true);
-            m_btnTxInTest->Enable(true);
-            m_btnTxOutTest->Enable(true);
+            // Re-enable each button only if its device slot is not "none".
+            // This preserves disabled state for "none" slots (e.g. TCI audio mode).
+            m_btnRxInTest->Enable(m_textCtrlRxIn->GetValue() != "none");
+            m_btnRxOutTest->Enable(m_textCtrlRxOut->GetValue() != "none");
+            m_btnTxInTest->Enable(m_textCtrlTxIn->GetValue() != "none");
+            m_btnTxOutTest->Enable(m_textCtrlTxOut->GetValue() != "none");
         });
     }, devName, ps);
 }
