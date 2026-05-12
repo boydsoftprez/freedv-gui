@@ -70,10 +70,24 @@ private:
     int port_;
     int trx_;           // TCI transceiver number (usually 0)
     int channel_;       // TCI channel number (usually 0)
-    
+
     std::shared_ptr<tci::TciWebSocketClient> wsClient_;
     std::atomic<bool> connected_;
     std::atomic<bool> pttState_;
+
+    // Multi-client MOX gate state machine.
+    //
+    // Problem: with two TCI clients on the same server (e.g. freedv-gui +
+    // WSJT-X), a TRX echo from the server does not indicate WHICH client
+    // pressed PTT.  The single pttState_ flag cannot distinguish "we keyed
+    // up" from "another client keyed up", so TX audio would leak onto another
+    // client's transmission.
+    //
+    // Solution: three fine-grained atomics track the request-confirm round
+    // trip.  maySendTxAudio() is the only correct TX-audio gate.
+    std::atomic<bool> pending_ptt_request_{false};  // set by setPtt(true), cleared on echo
+    std::atomic<bool> our_ptt_active_{false};        // set only when echo confirms our request
+    std::atomic<bool> other_client_mox_{false};      // set when MOX echo arrives without a pending request
     
     std::mutex stateMutex_;
     uint64_t currentFrequency_;
@@ -101,16 +115,52 @@ private:
     void handleVfo_(const std::vector<std::string>& args);
     void handleModulation_(const std::vector<std::string>& args);
     void handleTrx_(const std::vector<std::string>& args);
-    
+
+    // State machine helper: drives the three MOX gate atomics on every
+    // TRX echo received from the server, then fires onPttChange.
+    void handleTrxEcho_(bool moxOn);
+
     // Helper methods
     void sendCommand_(const std::string& cmdName, const std::vector<std::string>& args);
     tci::Modulation freeDvModeToTci_(Mode mode);
     Mode tciModeToFreeDv_(tci::Modulation mod);
-    
+
     // Connection event handlers
     void onConnected_();
     void onDisconnected_();
     void onError_(const std::string& error);
+
+public:
+    // Returns true only when we pressed PTT and the server has confirmed it.
+    // Gate all outgoing TX audio on this predicate to prevent leaking audio
+    // onto transmissions started by another client or a foot switch.
+    bool maySendTxAudio() const
+    {
+        return our_ptt_active_.load() && !other_client_mox_.load();
+    }
+
+    // --- BEGIN testing-only API ---
+    // These accessors let unit tests drive the MOX gate state machine
+    // without a real TCI server.  Not for production callers.
+    //
+    // Note: ptt() returns early when connected_ == false (no server).
+    // Tests drive the machine by setting pending_ptt_request_ directly via
+    // tst_armPendingPtt() and then injecting echoes via tst_injectTrxEcho().
+    bool tst_ourPttActive()      const { return our_ptt_active_.load(); }
+    bool tst_otherClientMox()    const { return other_client_mox_.load(); }
+    bool tst_pendingPttRequest() const { return pending_ptt_request_.load(); }
+    bool tst_maySendTxAudio()    const { return maySendTxAudio(); }
+    void tst_injectTrxEcho(bool moxOn) { handleTrxEcho_(moxOn); }
+    // Arm the pending flag as if setPtt(true) had been called on a connected controller.
+    void tst_armPendingPtt() { pending_ptt_request_.store(true); }
+    // Clear all three flags as if setPtt(false) had been called on a connected controller.
+    void tst_clearAllFlags()
+    {
+        our_ptt_active_.store(false);
+        pending_ptt_request_.store(false);
+        other_client_mox_.store(false);
+    }
+    // --- END testing-only API ---
 };
 
 #endif // TCI_RIG_CONTROLLER_H

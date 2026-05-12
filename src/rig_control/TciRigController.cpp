@@ -135,45 +135,58 @@ void TciRigController::ptt(bool state)
         fprintf(stderr, "TCI PTT: [QUEUE] Processing PTT command\n");
         fprintf(stderr, "TCI PTT: [QUEUE] Previous PTT state = %s\n", pttState_ ? "ON" : "OFF");
 #endif
-        
+
+        if (state) {
+            // Arm the pending flag BEFORE sending so the echo handler
+            // can attribute the upcoming TRX:0,true; echo to us.
+            pending_ptt_request_.store(true);
+        } else {
+            // Immediate local clear: stop sending TX audio right away, even
+            // before the server echo arrives.
+            our_ptt_active_.store(false);
+            pending_ptt_request_.store(false);
+            other_client_mox_.store(false);
+        }
+
         pttState_ = state;
-        
+
 #ifdef TCI_DEBUG_LOGGING
         fprintf(stderr, "TCI PTT: [QUEUE] New PTT state = %s\n", pttState_ ? "ON" : "OFF");
 #endif
-        
+
         // TRX:trx_num,state[,signal_source];
         // CRITICAL: When PTT ON, must specify signal source "tci" as third parameter
         // Otherwise eesdr3 defaults to microphone and never sends TX_CHRONO!
         std::vector<std::string> args;
         args.push_back(std::to_string(trx_));
         args.push_back(state ? "true" : "false");
-        
+
         if (state) {
             // PTT ON: Specify "tci" as signal source so eesdr3 expects audio via TCI
             args.push_back("tci");
 #ifdef TCI_DEBUG_LOGGING
-            fprintf(stderr, "TCI PTT: [QUEUE] Calling sendCommand_(\"trx\", [%d, %s, tci])\n", 
+            fprintf(stderr, "TCI PTT: [QUEUE] Calling sendCommand_(\"trx\", [%d, %s, tci])\n",
                     trx_, state ? "true" : "false");
 #endif
         } else {
             // PTT OFF: No signal source needed
 #ifdef TCI_DEBUG_LOGGING
-            fprintf(stderr, "TCI PTT: [QUEUE] Calling sendCommand_(\"trx\", [%d, %s])\n", 
+            fprintf(stderr, "TCI PTT: [QUEUE] Calling sendCommand_(\"trx\", [%d, %s])\n",
                     trx_, state ? "true" : "false");
 #endif
         }
-        
+
         sendCommand_("trx", args);
-        
+
 #ifdef TCI_DEBUG_LOGGING
         fprintf(stderr, "TCI PTT: [QUEUE] sendCommand_() returned\n");
         fprintf(stderr, "TCI PTT: [QUEUE] Notifying listeners...\n");
 #endif
-        
-        // Notify listeners
+
+        // Notify listeners immediately (preserves existing semantics; the echo
+        // from handleTrxEcho_ will fire a second notification when confirmed).
         onPttChange(this, state);
-        
+
 #ifdef TCI_DEBUG_LOGGING
         fprintf(stderr, "TCI PTT: [QUEUE] PTT command complete\n");
         fprintf(stderr, "======================\n\n");
@@ -381,14 +394,48 @@ void TciRigController::handleTrx_(const std::vector<std::string>& args)
     if (args.size() >= 2)
     {
         int trx = std::stoi(args[0]);
+        // args[1] is the raw token from the server -- the parser uppercases
+        // the command NAME but leaves argument values verbatim, so the server
+        // sends lowercase "true"/"false" (confirmed by parseTrxTrue/False tests).
         bool state = (args[1] == "true");
-        
+
         if (trx == trx_)
         {
-            pttState_ = state;
-            onPttChange(this, state);
+            handleTrxEcho_(state);
         }
     }
+}
+
+void TciRigController::handleTrxEcho_(bool moxOn)
+{
+    if (moxOn)
+    {
+        if (pending_ptt_request_.load())
+        {
+            // The server echoed MOX-on while we had a pending request:
+            // this echo is the confirmation that OUR PTT is active.
+            our_ptt_active_.store(true);
+            pending_ptt_request_.store(false);
+            other_client_mox_.store(false);
+        }
+        else
+        {
+            // MOX-on arrived without a pending request from us:
+            // another source (foot switch, second client) keyed the radio.
+            other_client_mox_.store(true);
+        }
+    }
+    else
+    {
+        // MOX off: server is back to RX regardless of who initiated TX.
+        our_ptt_active_.store(false);
+        other_client_mox_.store(false);
+        pending_ptt_request_.store(false);
+    }
+
+    // Preserve existing pttState_ semantics and fire the callback.
+    pttState_.store(moxOn);
+    onPttChange(this, moxOn);
 }
 
 void TciRigController::sendCommand_(const std::string& cmdName, const std::vector<std::string>& args)

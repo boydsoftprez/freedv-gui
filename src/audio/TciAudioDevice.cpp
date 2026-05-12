@@ -192,6 +192,11 @@ int TciAudioDevice::getTrx() const
     return trx_;
 }
 
+void TciAudioDevice::setMaySendTxAudioFn(std::function<bool()> fn)
+{
+    maySendTxAudioFn_ = std::move(fn);
+}
+
 void TciAudioDevice::enqueueTxAudio(const short* samples, size_t numSamples)
 {
     if (!samples || numSamples == 0)
@@ -325,52 +330,63 @@ void TciAudioDevice::handleStream_(const tci::StreamHeader& header, const uint8_
     }
     else if (header.type == tci::TX_CHRONO)
     {
-        // TCI is requesting TX audio
+        // TCI is requesting TX audio.
+        // Gate: only respond with real audio when OUR PTT is confirmed active.
+        // If another client or foot switch keyed the radio, send silence so we
+        // do not leak FreeDV audio onto their transmission.
+        // maySendTxAudioFn_ is nullptr when no rig controller is attached (e.g.
+        // unit tests or legacy callers); fall back to unguarded behavior.
+        bool mayTx = !maySendTxAudioFn_ || maySendTxAudioFn_();
+
         // The length field indicates how many samples are needed (MONO samples)
         uint32_t samplesNeeded = header.length;
-        
+
         static int txChronoCount = 0;
         if (++txChronoCount <= 5 || txChronoCount % 100 == 0)
         {
 #ifdef TCI_DEBUG_LOGGING
-            fprintf(stderr, "*** TX_CHRONO DETECTED! eesdr3 requesting %u samples ***\n", samplesNeeded);
+            fprintf(stderr, "*** TX_CHRONO DETECTED! eesdr3 requesting %u samples (mayTx=%s) ***\n",
+                    samplesNeeded, mayTx ? "YES" : "NO");
             fflush(stderr);
 #endif
         }
-        
-        // Allocate buffer for TX audio
+
+        // Allocate buffer for TX audio (zero-initialised = silence as fallback)
         std::vector<short> txSamples(samplesNeeded, 0);
-        
-        // Call onTxAudioDataFunction to pull audio from FreeDV's TX FIFO (outfifo1)
-        // This is analogous to how PulseAudio's StreamWriteCallback_ works
-        if (onTxAudioDataFunction)
+
+        if (mayTx)
         {
-            onTxAudioDataFunction(*this, txSamples.data(), samplesNeeded, onTxAudioDataState);
-            
-            if (txChronoCount <= 5 || txChronoCount % 100 == 0)
+            // Call onTxAudioDataFunction to pull audio from FreeDV's TX FIFO (outfifo1).
+            // This is analogous to how PulseAudio's StreamWriteCallback_ works.
+            if (onTxAudioDataFunction)
             {
+                onTxAudioDataFunction(*this, txSamples.data(), samplesNeeded, onTxAudioDataState);
+
+                if (txChronoCount <= 5 || txChronoCount % 100 == 0)
+                {
 #ifdef TCI_DEBUG_LOGGING
-                fprintf(stderr, "TCI sendTxAudio_: first 4 samples: %d %d %d %d\n",
-                        samplesNeeded > 0 ? txSamples[0] : 0,
-                        samplesNeeded > 1 ? txSamples[1] : 0,
-                        samplesNeeded > 2 ? txSamples[2] : 0,
-                        samplesNeeded > 3 ? txSamples[3] : 0);
-                fflush(stderr);
+                    fprintf(stderr, "TCI sendTxAudio_: first 4 samples: %d %d %d %d\n",
+                            samplesNeeded > 0 ? txSamples[0] : 0,
+                            samplesNeeded > 1 ? txSamples[1] : 0,
+                            samplesNeeded > 2 ? txSamples[2] : 0,
+                            samplesNeeded > 3 ? txSamples[3] : 0);
+                    fflush(stderr);
 #endif
+                }
             }
-        }
-        else
-        {
-            static bool warned = false;
-            if (!warned)
+            else
             {
-                fprintf(stderr, "TCI Audio: WARNING - onTxAudioDataFunction is NULL, sending silence!\n");
-                fflush(stderr);
-                warned = true;
+                static bool warned = false;
+                if (!warned)
+                {
+                    fprintf(stderr, "TCI Audio: WARNING - onTxAudioDataFunction is NULL, sending silence!\n");
+                    fflush(stderr);
+                    warned = true;
+                }
             }
         }
-        
-        // Send TX audio to TCI server
+
+        // Send TX audio (real audio or silence) to TCI server
         sendTxAudio_(txSamples.data(), txSamples.size());
     }
 }

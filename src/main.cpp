@@ -3087,11 +3087,15 @@ void MainFrame::startRxStream()
                     
                     // Create TCI audio device for RX audio from radio
                     auto tciDevice = std::make_shared<TciAudioDevice>(wsClient, trx);
+                    // Wire the MOX gate: TX audio is only sent when OUR PTT is confirmed.
+                    tciDevice->setMaySendTxAudioFn([tciRigController]() {
+                        return tciRigController->maySendTxAudio();
+                    });
                     tciDevice->initialize();  // Register callbacks safely
-                    
+
                     // RX from radio via TCI
                     rxInSoundDevice = tciDevice;
-                    
+
                     fprintf(stderr, "TCI Audio: Created TCI audio device for RX from radio (TRX %d)\n", trx);
                     fflush(stderr);
                 }
@@ -3210,16 +3214,20 @@ void MainFrame::startRxStream()
                     // - Race conditions in audio streaming
                     // - Callback conflicts between multiple instances
                     auto tciDevice = std::make_shared<TciAudioDevice>(wsClient, trx);
+                    // Wire the MOX gate: TX audio is only sent when OUR PTT is confirmed.
+                    tciDevice->setMaySendTxAudioFn([tciRigController]() {
+                        return tciRigController->maySendTxAudio();
+                    });
                     tciDevice->initialize();
-                    
+
                     // Share the same TCI device for both RX from radio and TX to radio
                     rxInSoundDevice = tciDevice;
                     txOutSoundDevice = tciDevice;
-                    
+
                     // Set TX callback NOW (before it gets overwritten)
                     // TX_CHRONO needs to read from outfifo1 (OnTxOutAudioData_)
                     tciDevice->setOnTxAudioData(&OnTxOutAudioData_, g_rxUserdata);
-                    
+
                     fprintf(stderr, "TCI Audio: Created TCI audio device for radio RX/TX (TRX %d)\n", trx);
                     fflush(stderr);
                 }

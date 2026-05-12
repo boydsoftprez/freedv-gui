@@ -36,6 +36,7 @@ if(UNITTEST)
     # Individual DefineRigControlUnitTest(...) calls live alongside their
     # test source files (added by Tasks 5, 7, 10 of the TCI port plan).
     DefineRigControlUnitTest(TciProtocolTest)
+    DefineRigControlUnitTest(TciMoxGateTest)
 
     # TCI WS roundtrip smoke test (multi-source: test driver + mock server
     # fixture).  Uses an explicit add_executable because DefineRigControlUnitTest

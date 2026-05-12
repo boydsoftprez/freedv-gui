@@ -26,6 +26,7 @@
 #include "IAudioDevice.h"
 #include "../rig_control/TciWebSocketClient.h"
 #include "../rig_control/TciProtocol.h"
+#include <functional>
 #include <memory>
 #include <thread>
 #include <mutex>
@@ -57,6 +58,13 @@ public:
     // TCI-specific methods
     void setTrx(int trx);
     int getTrx() const;
+
+    // Plumb a TX-gate predicate so TX_CHRONO responses only carry real audio
+    // when the rig controller has confirmed that OUR PTT is active.  Pass a
+    // lambda that calls rigController->maySendTxAudio().  If not set (nullptr),
+    // the device falls back to the unguarded legacy behavior.
+    void setMaySendTxAudioFn(std::function<bool()> fn);
+
     
     // Enqueue TX audio from FreeDV for transmission via TCI
     void enqueueTxAudio(const short* samples, size_t numSamples);
@@ -67,6 +75,7 @@ public:
     
 private:
     std::shared_ptr<tci::TciWebSocketClient> wsClient_;
+    std::function<bool()> maySendTxAudioFn_;  // nullptr => unguarded (legacy); set via setMaySendTxAudioFn()
     int trx_;
     int sampleRate_;
     int numChannels_;
