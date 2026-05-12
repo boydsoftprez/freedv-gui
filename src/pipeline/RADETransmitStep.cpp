@@ -159,11 +159,14 @@ short* RADETransmitStep::execute(short* inputSamples, int numInputSamples, int* 
         return outputSamples_.get();
     }
 
+    static int radeExecCount = 0;
+    bool doLog = (radeExecCount++ < 20);
+
     inputSampleFifo_.write(inputSamples, numInputSamples);
     int inputFifoUsed = inputSampleFifo_.numUsed();
     int outputFifoUsed = outputSampleFifo_.numUsed();
     int loopIterations = 0;
-    
+
     while ((*numOutputSamples + numSamplesPerTx) < maxSamples && inputSampleFifo_.numUsed() >= LPCNET_FRAME_SIZE)
     {
         short pcm[LPCNET_FRAME_SIZE];
