@@ -34,6 +34,7 @@ add_library(fdv_audio STATIC
     IAudioDevice.cpp
     IAudioEngine.cpp
     TciAudioDevice.cpp
+    TciSampleConvert.cpp
     ${AUDIO_ENGINE_LIBRARY_SPECIFIC_FILES}
 )
 
@@ -64,6 +65,7 @@ if(UNITTEST)
 
     # Individual DefineAudioUnitTest(...) calls live alongside their
     # test source files (added by Tasks 6, 15 of the TCI port plan).
+    DefineAudioUnitTest(TciAudioFrameTest)
 endif(UNITTEST)
 
 if(BOOTSTRAP_WXWIDGETS)
