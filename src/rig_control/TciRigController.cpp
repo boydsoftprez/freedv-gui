@@ -44,10 +44,10 @@ TciRigController::TciRigController(std::string hostname, int port, int trx, int 
 #endif
     
     wsClient_ = std::make_shared<tci::TciWebSocketClient>();
-    
+
     // Set up callbacks
-    wsClient_->setOnConnected([this]() { onConnected_(); });
-    wsClient_->setOnDisconnected([this]() { onDisconnected_(); });
+    wsClient_->setOnConnected([this]() { onWsConnected_(); });
+    wsClient_->setOnDisconnected([this]() { onWsDisconnected_(); });
     wsClient_->setOnError([this](const std::string& error) { onError_(error); });
     
     wsClient_->setCommandCallback([this](const std::string& cmdName, const std::vector<std::string>& args) {
@@ -68,15 +68,18 @@ void TciRigController::connect()
     {
         return;
     }
-    
+
+    setStatus_(ConnectionStatus::Connecting);
+
     enqueue_([this]() {
         if (wsClient_->connect(hostname_, port_))
         {
-            // Connection successful, wait for initialization commands
-            // The onConnected_ callback will handle the rest
+            // TCP layer kicked off; WS handshake completes asynchronously.
+            // onWsConnected_() fires once the open_handler runs.
         }
         else
         {
+            setStatus_(ConnectionStatus::Disconnected);
             onRigError(this, "Failed to connect to TCI server at " + hostname_ + ":" + std::to_string(port_));
         }
     });
@@ -88,18 +91,19 @@ void TciRigController::disconnect()
     {
         return;
     }
-    
+
     enqueue_([this]() {
         // Turn off PTT if it's on
         if (pttState_)
         {
             ptt(false);
         }
-        
+
         wsClient_->disconnect();
         connected_ = false;
+        setStatus_(ConnectionStatus::Disconnected);
     });
-    
+
     waitForAllTasksComplete_();
 }
 
@@ -196,45 +200,51 @@ void TciRigController::ptt(bool state)
 
 void TciRigController::setFrequency(uint64_t frequency)
 {
+    // Cache even when disconnected so replay on reconnect has the latest value.
+    cachedFreqHz_.store(frequency);
+
     if (!connected_)
     {
         return;
     }
-    
+
     enqueue_([this, frequency]() {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        
+
         // VFO:trx,vfo,frequency;
         std::vector<std::string> args;
         args.push_back(std::to_string(trx_));
         args.push_back(std::to_string(channel_));
         args.push_back(std::to_string(frequency));
-        
+
         sendCommand_("vfo", args);
-        
+
         currentFrequency_ = frequency;
     });
 }
 
 void TciRigController::setMode(Mode mode)
 {
+    // Cache even when disconnected so replay on reconnect has the latest value.
+    cachedModeIndex_.store(static_cast<int>(freeDvModeToTci_(mode)));
+
     if (!connected_)
     {
         return;
     }
-    
+
     enqueue_([this, mode]() {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        
+
         tci::Modulation tciMod = freeDvModeToTci_(mode);
-        
+
         // MODULATION:trx,modulation;
         std::vector<std::string> args;
         args.push_back(std::to_string(trx_));
         args.push_back(tci::CommandParser::modulationToString(tciMod));
-        
+
         sendCommand_("modulation", args);
-        
+
         currentModulation_ = tciMod;
     });
 }
@@ -505,13 +515,35 @@ IRigFrequencyController::Mode TciRigController::tciModeToFreeDv_(tci::Modulation
     }
 }
 
-void TciRigController::onConnected_()
+void TciRigController::setOnConnectionStatusChange(ConnectionStatusCallback cb)
+{
+    onStatusCb_ = std::move(cb);
+}
+
+TciRigController::ConnectionStatus TciRigController::connectionStatus() const
+{
+    return connStatus_.load();
+}
+
+void TciRigController::setStatus_(ConnectionStatus s)
+{
+    auto prev = connStatus_.exchange(s);
+    if (prev != s && onStatusCb_)
+    {
+        // Fires on whichever thread called setStatus_ (usually the WS worker
+        // thread). UI consumers must CallAfter / wxPostEvent themselves.
+        onStatusCb_(s);
+    }
+}
+
+void TciRigController::onWsConnected_()
 {
     connected_ = true;
-    
-    // Request initial settings
+    setStatus_(ConnectionStatus::Connected);
+
+    // Request audio sample rate from server.
     sendCommand_("audio_sample_rate", {std::to_string(48000)});
-    
+
     // Set RX filter bandwidth wide enough for FreeDV/RADE
     // RADE uses ~600-2350 Hz, so 100-2700 Hz gives good margin
     sendCommand_("rx_filter_band", {std::to_string(trx_), "100", "2700"});
@@ -519,22 +551,56 @@ void TciRigController::onConnected_()
     fprintf(stderr, "TCI: Set RX filter bandwidth to 100-2700 Hz for TRX %d\n", trx_);
     fflush(stderr);
 #endif
-    
+
     // Note: audio_start command is sent by TciAudioDevice::start() when the audio
     // device is ready to receive data. Sending it here would cause audio packets
     // to arrive before the audio device is initialized, causing crashes.
-    
-    // Set initial mode to DIGU for FreeDV
-    setMode(DIGU);
-    
-    // Notify listeners
+
+    // Replay cached frequency if we have one from before a disconnect.
+    uint64_t freq = cachedFreqHz_.load();
+    if (freq > 0)
+    {
+        sendCommand_("vfo", {std::to_string(trx_), std::to_string(channel_), std::to_string(freq)});
+    }
+
+    // Replay cached modulation if we have one.
+    int modeIdx = cachedModeIndex_.load();
+    if (modeIdx >= 0)
+    {
+        std::string modStr = tci::CommandParser::modulationToString(
+            static_cast<tci::Modulation>(modeIdx));
+        sendCommand_("modulation", {std::to_string(trx_), modStr});
+    }
+    else
+    {
+        // No cached mode yet: set initial mode to DIGU for FreeDV and cache it.
+        cachedModeIndex_.store(static_cast<int>(tci::DIGU));
+        sendCommand_("modulation", {std::to_string(trx_),
+            tci::CommandParser::modulationToString(tci::DIGU)});
+    }
+
+    // Clear stale MOX state: server has been reset from our viewpoint.
+    our_ptt_active_.store(false);
+    other_client_mox_.store(false);
+    pending_ptt_request_.store(false);
+    pttState_.store(false);
+
+    // Notify listeners.
     onRigConnected(this);
 }
 
-void TciRigController::onDisconnected_()
+void TciRigController::onWsDisconnected_()
 {
     bool wasConnected = connected_.exchange(false);
-    
+
+    // TcpConnectionHandler will auto-retry every 5 s via its reconnect timer.
+    // Show Reconnecting until either a fresh onWsConnected_ fires or the user
+    // explicitly calls disconnect() (which sets Disconnected).
+    setStatus_(ConnectionStatus::Reconnecting);
+
+    // Do NOT clear cached freq/mode here: the cache exists precisely so we can
+    // replay it once the reconnect succeeds.
+
     if (wasConnected)
     {
         onRigDisconnected(this);
