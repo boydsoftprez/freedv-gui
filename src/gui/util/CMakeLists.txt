@@ -1,7 +1,17 @@
-add_library(fdv_gui_util STATIC
+set(FDV_GUI_UTIL_SOURCES
     LabelOverrideAccessible.cpp
     NameOverrideAccessible.cpp
     wxListViewComboPopup.cpp)
+
+if(APPLE)
+    list(APPEND FDV_GUI_UTIL_SOURCES MacStaticBox.mm)
+endif()
+
+add_library(fdv_gui_util STATIC ${FDV_GUI_UTIL_SOURCES})
+
+if(APPLE)
+    target_link_libraries(fdv_gui_util "-framework AppKit")
+endif()
 
 target_compile_options(fdv_gui_util PRIVATE ${WARNINGS_AS_ERRORS_FLAGS})
     
