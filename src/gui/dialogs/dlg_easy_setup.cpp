@@ -583,7 +583,10 @@ void EasySetupDialog::ExchangePttDeviceData(int inout)
             m_serialBox->Hide();
             m_tciBox->Hide();
 
-            m_cbRigName->SetSelection(wxGetApp().m_intHamlibRig);
+            if (wxGetApp().m_intHamlibRig >= 0)
+            {
+                m_cbRigName->SetSelection(wxGetApp().m_intHamlibRig);
+            }
             resetIcomCIVStatus_();
             
             auto selected = m_cbRigName->GetCurrentSelection();
@@ -673,7 +676,7 @@ void EasySetupDialog::ExchangePttDeviceData(int inout)
         if (m_ckUseHamlibPTT->GetValue())
         {
             wxGetApp().m_intHamlibRig = m_cbRigName->GetSelection();
-            wxGetApp().appConfiguration.rigControlConfiguration.hamlibRigName = HamlibRigController::RigIndexToName(wxGetApp().m_intHamlibRig);
+            wxGetApp().appConfiguration.rigControlConfiguration.hamlibRigName = (wxGetApp().m_intHamlibRig >= 0) ? HamlibRigController::RigIndexToName(wxGetApp().m_intHamlibRig) : "";
             wxGetApp().appConfiguration.rigControlConfiguration.hamlibSerialPort = m_cbSerialPort->GetValue();
             wxGetApp().appConfiguration.rigControlConfiguration.hamlibPttSerialPort = m_cbSerialPort->GetValue();
             
@@ -768,8 +771,17 @@ void EasySetupDialog::HamlibRigNameChanged(wxCommandEvent&)
 
 void EasySetupDialog::resetIcomCIVStatus_()
 {
-    std::string rigName = m_cbRigName->GetString(m_cbRigName->GetCurrentSelection()).ToStdString();
-    if (rigName.find("Icom") == 0)
+    bool icomFound = false;
+    if (m_cbRigName->GetCurrentSelection() >= 0)
+    {
+        std::string rigName = m_cbRigName->GetString(m_cbRigName->GetCurrentSelection()).ToStdString();
+        if (rigName.find("Icom") == 0)
+        {
+            icomFound = true;
+        }
+    }
+
+    if (icomFound)
     {
         m_stIcomCIVHex->Show();
         m_tcIcomCIVHex->Show();
@@ -1207,7 +1219,10 @@ void EasySetupDialog::updateHamlibDevices_()
     {
         m_cbRigName->Append(HamlibRigController::RigIndexToName(index));
     }
-    m_cbRigName->SetSelection(wxGetApp().m_intHamlibRig);
+    if (wxGetApp().m_intHamlibRig >= 0)
+    {
+        m_cbRigName->SetSelection(wxGetApp().m_intHamlibRig);
+    }
     
     /* populate Hamlib serial rate combo box */
     updateHamlibSerialRates_();
