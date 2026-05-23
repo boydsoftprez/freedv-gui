@@ -29,7 +29,9 @@
 
 #include "audio/AudioEngineFactory.h"
 #include "audio/IAudioDevice.h"
+#include "audio/TciDeviceNaming.h"
 
+#include "dlg_ptt.h"
 #include "../../main.h"
 #include "../../pipeline/ResampleStep.h"
 
@@ -95,7 +97,7 @@ void AudioOptsDialog::buildTestControls(PlotScalar **plotScalar, wxButton **btnT
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=
 // AudioOptsDialog()
 //-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=
-AudioOptsDialog::AudioOptsDialog(wxWindow* parent, wxWindowID id, const wxString& title, const wxPoint& pos, const wxSize& size, long style) : wxDialog(parent, id, title, pos, size, style)
+AudioOptsDialog::AudioOptsDialog(wxWindow* parent, wxWindowID id, const wxString& title, const wxPoint& pos, const wxSize& size, long style) : wxDialog(parent, id, title, pos, size, style), m_settingTciPair(false)
 {
     // XXX - FreeDV only supports English but makes a best effort to at least use regional formatting
     // for e.g. numbers. Thus, we only need to override layout direction.
@@ -803,11 +805,46 @@ void AudioOptsDialog::populateParams(AudioInfoDisplay ai)
         ctrl->SetItem(idx, col++, buf);
     }
 
+    // For radio-side directions (RX In, TX Out), insert a TCI virtual device row
+    // before "none" so the user can switch to TCI audio without leaving this dialog.
+    bool isRadioSide = (ctrl == m_listCtrlRxInDevices || ctrl == m_listCtrlTxOutDevices);
+    if (isRadioSide)
+    {
+        auto& rigCfg = wxGetApp().appConfiguration.rigControlConfiguration;
+        // Use configured hostname, or "localhost" as placeholder if not yet set
+        std::string displayHost = rigCfg.tciHostname.get().ToStdString();
+        if (displayHost.empty())
+        {
+            displayHost = "localhost";
+        }
+        int displayPort = static_cast<int>(rigCfg.tciPort.get());
+        if (displayPort == 0)
+        {
+            displayPort = 50001;
+        }
+        std::string direction = (ctrl == m_listCtrlRxInDevices) ? "RX" : "TX";
+        std::string tciName = tci::makeTciDeviceName(displayHost, displayPort, direction);
+
+        col = 0;
+        buf = wxString::FromUTF8(tciName);
+        int tciIdx = ctrl->InsertItem(ctrl->GetItemCount(), buf);
+        col++;
+
+        buf = wxT("--");
+        ctrl->SetItem(tciIdx, col++, buf);
+
+        buf = wxT("TCI");
+        ctrl->SetItem(tciIdx, col++, buf);
+
+        buf = wxT("48000");
+        ctrl->SetItem(tciIdx, col++, buf);
+    }
+
     // add "none" option at end
 
     buf.Printf(wxT("%s"), "none");
     ctrl->InsertItem(ctrl->GetItemCount(), buf);
-    
+
     // Auto-size column widths to improve readability
     for (int col = 0; col < 4; col++)
     {
@@ -847,10 +884,139 @@ void AudioOptsDialog::OnDeviceSelect(wxComboBox *cbSampleRate,
 }
 
 //-------------------------------------------------------------------------
+// selectNoneInList()
+//
+// Helper: find the "none" row in a list and programmatically select it.
+//-------------------------------------------------------------------------
+static void selectNoneInList(wxListCtrl* list, wxTextCtrl* text, wxComboBox* cb)
+{
+    for (int i = 0; i < list->GetItemCount(); i++)
+    {
+        if (list->GetItemText(i, 0).IsSameAs("none"))
+        {
+            list->SetItemState(i, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+            text->SetValue("none");
+            cb->SetValue("");
+            return;
+        }
+    }
+}
+
+//-------------------------------------------------------------------------
+// findTciRowIndex()
+//
+// Helper: return the list index of the TCI row, or -1 if not found.
+//-------------------------------------------------------------------------
+static int findTciRowIndex(wxListCtrl* list)
+{
+    for (int i = 0; i < list->GetItemCount(); i++)
+    {
+        if (tci::isTciDeviceName(list->GetItemText(i, 0).ToStdString()))
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+//-------------------------------------------------------------------------
+// handleTciSelection()
+//
+// Common handler for when user clicks the TCI row in RX In or TX Out.
+// Returns true if TCI was accepted, false if selection was reverted.
+//-------------------------------------------------------------------------
+bool AudioOptsDialog::handleTciSelection(wxListCtrl* clickedList,
+                                         wxTextCtrl* clickedText,
+                                         wxComboBox* clickedCb,
+                                         int clickedIndex,
+                                         wxListCtrl* otherList,
+                                         wxTextCtrl* otherText,
+                                         wxComboBox* otherCb)
+{
+    auto& rigCfg = wxGetApp().appConfiguration.rigControlConfiguration;
+    bool tciConfigured = rigCfg.useTCI.get() && !rigCfg.tciHostname.get().empty();
+
+    if (!tciConfigured)
+    {
+        // Revert selection to previously shown value (or "none" as safe fallback).
+        // Find "none" row and re-select it so the list doesn't stay on TCI.
+        selectNoneInList(clickedList, clickedText, clickedCb);
+
+        int answer = wxMessageBox(
+            wxT("TCI audio requires a TCI server to be configured first.\n\n")
+            wxT("Go to Tools -> PTT, enable 'Enable CAT control via TCI', set the server ")
+            wxT("hostname and port, and apply.\n\n")
+            wxT("Would you like to open the PTT dialog now?"),
+            wxT("TCI Not Configured"),
+            wxYES_NO | wxICON_INFORMATION,
+            this);
+
+        if (answer == wxYES)
+        {
+            ComPortsDlg* pttDlg = new ComPortsDlg(this);
+            pttDlg->ShowModal();
+            delete pttDlg;
+        }
+        return false;
+    }
+
+    // TCI is configured: accept the selection.
+    wxString tciName = clickedList->GetItemText(clickedIndex, 0);
+    clickedText->SetValue(tciName);
+
+    // Fixed 48 kHz sample rate for TCI.
+    clickedCb->Clear();
+    clickedCb->AppendString("48000");
+    clickedCb->SetValue("48000");
+
+    // Auto-pair: select TCI in the other radio-side list too.
+    int otherTciIdx = findTciRowIndex(otherList);
+    if (otherTciIdx >= 0)
+    {
+        otherList->SetItemState(otherTciIdx, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+        otherText->SetValue(otherList->GetItemText(otherTciIdx, 0));
+        otherCb->Clear();
+        otherCb->AppendString("48000");
+        otherCb->SetValue("48000");
+    }
+
+    return true;
+}
+
+//-------------------------------------------------------------------------
 // OnRxInDeviceSelect()
 //-------------------------------------------------------------------------
 void AudioOptsDialog::OnRxInDeviceSelect(wxListEvent& evt)
 {
+    if (m_settingTciPair)
+    {
+        return;
+    }
+
+    wxString devName = m_listCtrlRxInDevices->GetItemText(evt.GetIndex(), 0);
+
+    if (tci::isTciDeviceName(devName.ToStdString()))
+    {
+        m_settingTciPair = true;
+        handleTciSelection(m_listCtrlRxInDevices, m_textCtrlRxIn, m_cbSampleRateRxIn,
+                           evt.GetIndex(),
+                           m_listCtrlTxOutDevices, m_textCtrlTxOut, m_cbSampleRateTxOut);
+        m_settingTciPair = false;
+        m_btnRxInTest->Enable(false);   // no test for TCI virtual device
+        m_btnTxOutTest->Enable(false);
+        return;
+    }
+
+    // Non-TCI selected in RX In: if TX Out is currently TCI, un-pair it.
+    if (!m_settingTciPair &&
+        tci::isTciDeviceName(m_textCtrlTxOut->GetValue().ToStdString()))
+    {
+        m_settingTciPair = true;
+        selectNoneInList(m_listCtrlTxOutDevices, m_textCtrlTxOut, m_cbSampleRateTxOut);
+        m_btnTxOutTest->Enable(false);
+        m_settingTciPair = false;
+    }
+
     OnDeviceSelect(m_cbSampleRateRxIn,
                    m_textCtrlRxIn,
                    m_listCtrlRxInDevices,
@@ -890,6 +1056,35 @@ void AudioOptsDialog::OnTxInDeviceSelect(wxListEvent& evt)
 //-------------------------------------------------------------------------
 void AudioOptsDialog::OnTxOutDeviceSelect(wxListEvent& evt)
 {
+    if (m_settingTciPair)
+    {
+        return;
+    }
+
+    wxString devName = m_listCtrlTxOutDevices->GetItemText(evt.GetIndex(), 0);
+
+    if (tci::isTciDeviceName(devName.ToStdString()))
+    {
+        m_settingTciPair = true;
+        handleTciSelection(m_listCtrlTxOutDevices, m_textCtrlTxOut, m_cbSampleRateTxOut,
+                           evt.GetIndex(),
+                           m_listCtrlRxInDevices, m_textCtrlRxIn, m_cbSampleRateRxIn);
+        m_settingTciPair = false;
+        m_btnTxOutTest->Enable(false);   // no test for TCI virtual device
+        m_btnRxInTest->Enable(false);
+        return;
+    }
+
+    // Non-TCI selected in TX Out: if RX In is currently TCI, un-pair it.
+    if (!m_settingTciPair &&
+        tci::isTciDeviceName(m_textCtrlRxIn->GetValue().ToStdString()))
+    {
+        m_settingTciPair = true;
+        selectNoneInList(m_listCtrlRxInDevices, m_textCtrlRxIn, m_cbSampleRateRxIn);
+        m_btnRxInTest->Enable(false);
+        m_settingTciPair = false;
+    }
+
     OnDeviceSelect(m_cbSampleRateTxOut,
                    m_textCtrlTxOut,
                    m_listCtrlTxOutDevices,

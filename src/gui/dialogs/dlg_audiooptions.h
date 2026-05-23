@@ -58,6 +58,7 @@ class AudioOptsDialog : public wxDialog
         std::thread*    m_audioPlotThread;
     protected:
         bool            m_isPaInitialized;
+        bool            m_settingTciPair;
 
         void buildTestControls(PlotScalar **plotScalar, wxButton **btnTest, 
                                wxStaticBox *parentPanel, wxBoxSizer *bSizer, wxString const& buttonLabel);
@@ -68,11 +69,19 @@ class AudioOptsDialog : public wxDialog
         void populateParams(AudioInfoDisplay);
         bool setTextCtrlIfDevNameValid(wxTextCtrl *textCtrl, wxListCtrl *listCtrl, wxString const& devName);
         void audioEngineInit(void);
-        void OnDeviceSelect(wxComboBox *cbSampleRate, 
-                            wxTextCtrl *textCtrl, 
-                            wxListCtrl *listCtrlDevices, 
+        void OnDeviceSelect(wxComboBox *cbSampleRate,
+                            wxTextCtrl *textCtrl,
+                            wxListCtrl *listCtrlDevices,
                             int         index,
                             int         in_out);
+
+        bool handleTciSelection(wxListCtrl* clickedList,
+                                wxTextCtrl* clickedText,
+                                wxComboBox* clickedCb,
+                                int         clickedIndex,
+                                wxListCtrl* otherList,
+                                wxTextCtrl* otherText,
+                                wxComboBox* otherCb);
 
         AudioInfoDisplay m_RxInDevices;
         AudioInfoDisplay m_RxOutDevices;
