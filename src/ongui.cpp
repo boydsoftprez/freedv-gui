@@ -1833,7 +1833,9 @@ void MainFrame::OnChangeReportFrequency( wxCommandEvent& )
     }
 
     if (freqStr != oldFreqString)
-    {      
+    {
+        log_info("Request frequency change to %" PRIu64 " Hz", wxGetApp().appConfiguration.reportingConfiguration.reportingFrequency.get());
+
         // Report current frequency to reporters
         for (auto& ptr : wxGetApp().m_reporters)
         {
