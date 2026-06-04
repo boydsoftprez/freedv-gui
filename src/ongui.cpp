@@ -63,7 +63,7 @@ extern wxMutex g_mutexProtectingCallbackData;
 
 static wxString bandNameForFilter(FilterFrequency band);
 
-std::atomic<bool> g_eoo_enqueued;
+extern std::atomic<bool> g_eoo_enqueued;
 
 void clickTune(float frequency); // callback to pass new click freq
 
@@ -1171,7 +1171,7 @@ void MainFrame::OnTogBtnPTTRightClick( wxContextMenuEvent& )
 //-------------------------------------------------------------------------
 // OnTogBtnPTT ()
 //-------------------------------------------------------------------------
-void MainFrame::OnTogBtnPTT (wxCommandEvent& event)
+void MainFrame::OnTogBtnPTT (wxCommandEvent&)
 {
     if (vk_state == VK_TX)
     {
@@ -1179,10 +1179,9 @@ void MainFrame::OnTogBtnPTT (wxCommandEvent& event)
         VoiceKeyerProcessEvent(VK_SPACE_BAR);
     }
     else
-    {        
+    {
         togglePTT();
     }
-    event.Skip();
 }
 
 void MainFrame::togglePTT(void) {
@@ -1409,7 +1408,7 @@ void MainFrame::togglePTT(void) {
         g_tx.store(true, std::memory_order_release);
     }
     
-    if (wxGetApp().rigPttController != nullptr && wxGetApp().rigPttController->isConnected()) 
+    if (wxGetApp().rigPttController != nullptr && wxGetApp().rigPttController->isConnected())
     {
         wxGetApp().rigPttController->ptt(newTx);
     }
@@ -2086,7 +2085,7 @@ void MainFrame::OnToolsImportConfig(wxCommandEvent& event)
     }
 
     // On Linux/macOS, this replaces $HOME with "~" to shorten the title a bit.
-    wxFileName fn(path);        
+    wxFileName fn(path);
     wxGetApp().customConfigFileName = fn.GetFullName();
 
     SetTitle(wxString::Format("%s (%s)", _("FreeDV ") + wxString::FromUTF8(GetFreeDVVersion().c_str()), wxGetApp().customConfigFileName));
@@ -2098,4 +2097,47 @@ void MainFrame::OnToolsImportConfig(wxCommandEvent& event)
     SetTitle(GetTitle() + wxString::Format(" [Expires %s]", expireDate.FormatDate()));
 #endif // defined(UNOFFICIAL_RELEASE)
     setConfiguration_(importConfig);
+
+    // Remember this file so it is automatically restored on the next startup.
+    saveLastUsedConfigPath(path);
+}
+
+void MainFrame::OnToolsLoadDefaultConfigUI(wxUpdateUIEvent& event)
+{
+    event.Enable(!m_RxRunning);
+}
+
+void MainFrame::OnToolsLoadDefaultConfig(wxCommandEvent& event)
+{
+    wxUnusedVar(event);
+
+    wxMessageDialog messageDialog(
+        this, _("This will load the default FreeDV configuration. Are you sure?"),
+        _("Load Default Configuration"),
+        wxYES_NO | wxICON_QUESTION | wxCENTRE);
+
+    if (messageDialog.ShowModal() != wxID_YES)
+        return;
+
+    // Create a platform-appropriate default config:
+    // On Windows this uses the registry (wxRegConfig); on macOS/Linux it
+    // uses the default file location (wxFileConfig).  This becomes the
+    // active pConfig going forward — no need to restore the old one.
+    wxConfigBase* defaultConfig = wxConfigBase::Create();
+    
+    setConfiguration_(defaultConfig);
+
+    // Remove the last-used config path so startup reverts to the default next time.
+    clearLastUsedConfigPath();
+
+    // Clear any custom config file indicator from the title bar.
+    wxGetApp().customConfigFileName = wxEmptyString;
+    SetTitle(_("FreeDV ") + wxString::FromUTF8(GetFreeDVVersion().c_str()));
+#if defined(UNOFFICIAL_RELEASE)
+    wxDateTime buildDate(wxInvalidDateTime);
+    wxString::const_iterator iter;
+    buildDate.ParseDate(FREEDV_BUILD_DATE, &iter);
+    auto expireDate = buildDate + EXPIRES_AFTER_TIMEFRAME;
+    SetTitle(GetTitle() + wxString::Format(" [Expires %s]", expireDate.FormatDate()));
+#endif // defined(UNOFFICIAL_RELEASE)
 }
