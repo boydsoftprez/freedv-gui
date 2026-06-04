@@ -550,6 +550,62 @@ int AudioOptsDialog::ExchangeData(int inout)
         m_btnRxOutTest->Enable(m_textCtrlRxOut->GetValue() != "none");
         m_btnTxInTest->Enable(m_textCtrlTxIn->GetValue() != "none");
         m_btnTxOutTest->Enable(m_textCtrlTxOut->GetValue() != "none");
+
+        // If TCI audio mode is active, override the radio-side slots to show
+        // the TCI virtual device as visibly selected.  Without this, the
+        // dialog presents stale physical-device names that aren't actually
+        // routing audio, which is confusing.  Use the re-entrancy guard so
+        // the programmatic SetItemState calls don't fire OnSelect handlers.
+        if (wxGetApp().appConfiguration.rigControlConfiguration.useTCIAudio)
+        {
+            const wxString host = wxGetApp().appConfiguration.rigControlConfiguration.tciHostname.get();
+            const int port = static_cast<int>(wxGetApp().appConfiguration.rigControlConfiguration.tciPort.get());
+            const std::string hostStd = host.IsEmpty() ? std::string("localhost") : host.ToStdString();
+            const wxString tciRx = wxString::FromUTF8(tci::makeTciDeviceName(hostStd, port, "RX").c_str());
+            const wxString tciTx = wxString::FromUTF8(tci::makeTciDeviceName(hostStd, port, "TX").c_str());
+
+            m_settingTciPair = true;
+
+            // RX In: locate the TCI row by prefix-match (host/port may have
+            // drifted since the row was inserted; isTciDeviceName tolerates
+            // any "TCI: ..." string) and visibly select it.
+            for (int i = 0; i < m_listCtrlRxInDevices->GetItemCount(); ++i)
+            {
+                if (tci::isTciDeviceName(m_listCtrlRxInDevices->GetItemText(i, 0).ToStdString()))
+                {
+                    m_listCtrlRxInDevices->SetItemState(i, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED,
+                                                          wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
+                    m_listCtrlRxInDevices->EnsureVisible(i);
+                    m_textCtrlRxIn->SetValue(tciRx);
+                    break;
+                }
+            }
+
+            // TX Out: same pattern.
+            for (int i = 0; i < m_listCtrlTxOutDevices->GetItemCount(); ++i)
+            {
+                if (tci::isTciDeviceName(m_listCtrlTxOutDevices->GetItemText(i, 0).ToStdString()))
+                {
+                    m_listCtrlTxOutDevices->SetItemState(i, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED,
+                                                           wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
+                    m_listCtrlTxOutDevices->EnsureVisible(i);
+                    m_textCtrlTxOut->SetValue(tciTx);
+                    break;
+                }
+            }
+
+            // Fixed 48 kHz for TCI streams; the sample-rate combo should
+            // reflect that rather than whatever rate the displaced sound
+            // card had previously persisted.
+            m_cbSampleRateRxIn->SetValue("48000");
+            m_cbSampleRateTxOut->SetValue("48000");
+
+            // Test buttons don't apply to TCI virtual devices.
+            m_btnRxInTest->Enable(false);
+            m_btnTxOutTest->Enable(false);
+
+            m_settingTciPair = false;
+        }
     }
 
     if(inout == EXCHANGE_DATA_OUT)
