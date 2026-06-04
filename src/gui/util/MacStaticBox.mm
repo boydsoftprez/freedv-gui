@@ -103,10 +103,6 @@ void MakeStaticBoxFlat(wxStaticBox* box)
 
 } // namespace tci
 
-#else  // !__APPLE__
-
-namespace tci {
-void MakeStaticBoxFlat(wxStaticBox*) {}
-} // namespace tci
-
 #endif  // __APPLE__
+// Non-Apple builds use the inline no-op declared in MacStaticBox.h; this
+// translation unit is only compiled when APPLE (see gui/util/CMakeLists.txt).

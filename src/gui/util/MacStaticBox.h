@@ -35,8 +35,15 @@ namespace tci {
 // draws only the title cell.  The result: parent chrome shows through,
 // title text stays visible, group label still reads as a labeled group.
 //
-// No-op on non-Apple platforms.
+// No-op on non-Apple platforms.  The Apple implementation lives in
+// MacStaticBox.mm (only compiled when APPLE).  Off Apple, this header
+// provides an inline no-op so call sites need no platform guards and no
+// undefined symbol is referenced at link time.
+#if defined(__APPLE__)
 void MakeStaticBoxFlat(wxStaticBox* box);
+#else
+inline void MakeStaticBoxFlat(wxStaticBox*) {}
+#endif
 
 } // namespace tci
 
