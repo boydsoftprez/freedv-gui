@@ -953,8 +953,8 @@ void ComPortsDlg::OnTest(wxCommandEvent&) {
         std::shared_ptr<TciRigController> tci = std::make_shared<TciRigController>(
             std::string(hostname.mb_str(wxConvUTF8)), (int)port, 0, 0);
         
-        tci->onRigError += [=](IRigController*, std::string const& error) {
-            CallAfter([=]() {
+        tci->onRigError += [=, this](IRigController*, std::string const& error) {
+            CallAfter([=, this]() {
                 wxMessageBox(wxString::Format("Couldn't connect to TCI server (%s). Make sure the server is running at %s:%ld", 
                     error, (const char*)hostname.c_str(), port), 
                     wxT("Error"), wxOK | wxICON_ERROR, this);
@@ -987,7 +987,7 @@ void ComPortsDlg::OnTest(wxCommandEvent&) {
             }
         };
         
-        std::thread tciThread([=]() {
+        std::thread tciThread([=, this]() {
             tci->connect();
             
             std::unique_lock<std::mutex> lk(*mtx);
