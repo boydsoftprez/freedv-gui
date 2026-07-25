@@ -71,6 +71,7 @@
 
 #include "topFrame.h"
 #include "gui/dialogs/filter_frequency.h"
+#include "gui/dialogs/tot_warning.h"
 #include "gui/controls/plot.h"
 #include "gui/controls/plot_scalar.h"
 #include "gui/controls/plot_scatter.h"
@@ -118,6 +119,9 @@ enum {
         ID_TIMER_UPDATE_OTHER,
         ID_TIMER_PSKREPORTER,
         ID_TIMER_UPD_FREQ,
+        ID_TIMER_TOT,           // Time-Out Timer
+        ID_TIMER_TOT_WARNING,   // Polls remaining TOT time to show warning
+        ID_TIMER_PTT_KEY_POLL,  // Polls physical PTT key state after a forced TX stop
      };
 
 #define EXCHANGE_DATA_IN    0
@@ -307,6 +311,7 @@ class MainFrame : public TopFrame
         PlotScalar*             m_panelSNR;
 
         bool                    m_RxRunning;
+        bool                    txChangeoverOccurring_;
         
         bool                    OpenHamlibRig();
         bool                    OpenTciRig();
@@ -321,11 +326,11 @@ class MainFrame : public TopFrame
 
 #ifdef _USE_TIMER
         wxTimer                 m_plotTimer;
-        
+
         // Not sure why we have the option to disable timers. TBD?
         wxTimer                 m_pskReporterTimer;
         wxTimer                 m_updFreqStatusTimer; //[UP]
-        
+
         wxTimer                 m_plotWaterfallTimer;
         wxTimer                 m_plotSpectrumTimer;
         wxTimer                 m_plotScatterTimer;
@@ -333,7 +338,41 @@ class MainFrame : public TopFrame
         wxTimer                 m_plotSpeechOutTimer;
         wxTimer                 m_plotDemodInTimer;
         wxTimer                 m_plotSNRTimer;
+
+        // Time-Out Timer (TOT): stops TX after configured period
+        wxTimer                 m_totTimer;
+        wxTimer                 m_totWarningTimer;
+
+        // Polls the physical PTT key state (via wxGetKeyState) after a forced
+        // TX stop, so a held key can't immediately restart TX -- see
+        // m_pttKeyRequireRelease_ below.
+        wxTimer                 m_pttKeyPollTimer;
 #endif
+
+        // TOT warning state
+        std::chrono::time_point<std::chrono::high_resolution_clock> m_totTxStartTime;
+        int                     m_totCurrentDurationMs{0};
+        TotWarningDialog*       m_totWarningDialog_{nullptr};
+
+        // Set when TX is force-stopped (e.g. by the TOT) while the PTT key is
+        // still physically held down. Blocks the spacebar from restarting TX
+        // until wxGetKeyState() confirms a genuine release -- this can't be
+        // determined reliably from wxEVT_KEY_UP/DOWN alone, since holding a
+        // key down can generate real (non-auto-repeat-flagged) up/down event
+        // pairs at the OS key-repeat rate.
+        bool                    m_pttKeyRequireRelease_{false};
+
+        // Set when the momentary PTT key is released while a TX start is
+        // still in progress (e.g. during the configured TX/RX delay in
+        // togglePTT()). A stop requested during that window can't be
+        // actioned immediately -- togglePTT()'s re-entrancy guard
+        // (txChangeoverOccurring_) would just no-op it -- so togglePTT()
+        // checks this once the start completes and immediately stops TX
+        // if it's set, instead of leaving the radio keyed indefinitely.
+        bool                    m_momentaryKeyReleasedDuringChangeover_{false};
+
+        // TOT beep state
+        std::chrono::time_point<std::chrono::high_resolution_clock> m_totLastBeepTime_;
 
     void destroy_fifos(void);
 
@@ -409,6 +448,12 @@ class MainFrame : public TopFrame
         void OnTogBtnAnalogClick(wxCommandEvent& event) override;
         void OnTogBtnPTT( wxCommandEvent& event ) override;
         void OnTogBtnPTTRightClick( wxContextMenuEvent& event ) override;
+
+        // NOTE: sets TX colour on press to avoid a GTK blue-flash during the TX delay.
+        // Upstream may prefer a different approach (e.g. true press-to-start TX).
+        void OnTogBtnPTTMouseDown( wxMouseEvent& event );
+        void OnTogBtnPTTMouseLeave( wxMouseEvent& event );
+
         void OnTogBtnVoiceKeyerClick (wxCommandEvent& event) override;
         void OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& event ) override;
         
@@ -462,10 +507,14 @@ class MainFrame : public TopFrame
 
         void OnSystemColorChanged(wxSysColourChangedEvent& event) override;
         
-        void OnNotebookPageChanging(wxAuiNotebookEvent& event) override;
-        
         void OnChooseAlternateVoiceKeyerFile( wxCommandEvent& event );
         void OnRecordNewVoiceKeyerFile( wxCommandEvent& event );
+
+        void OnTOTTimer(wxTimerEvent& evt);
+        void OnTOTWarningTimer(wxTimerEvent& evt);
+        void OnPttKeyPollTimer(wxTimerEvent& evt);
+        void playTotBeep_();
+        void stopTotBeep_();
         
         void OnSetMonitorVKAudio( wxCommandEvent& event );
         void OnSetMonitorTxAudio( wxCommandEvent& event );
@@ -576,11 +625,17 @@ class MainFrame : public TopFrame
         bool terminating_; // used for terminating FreeDV
         bool realigned_; // used to inhibit resize hack once already done
         bool syncState_; // GUI copy of current sync state
+
+        // Caches appConfiguration.experimentalFeatures as of the last tab layout load
+        // attempt, so exit-time save uses that instead of a possibly-since-toggled live
+        // value (toggling the checkbox mid-session doesn't reload/reapply a layout).
+        bool tabLayoutPersistenceEnabledAtStartup_;
         
         int         getSoundCardIDFromName(wxString& name, bool input);
         bool        validateSoundCardSetup();
         
         void loadConfiguration_();
+        void restoreCallsignListFromCsv_();
         void resetStats_();
         void exportConfiguration_(wxConfigBase* config);
         void setConfiguration_(wxConfigBase* config);
@@ -596,6 +651,7 @@ class MainFrame : public TopFrame
         
         void initializeFreeDVReporter_();
         void updateVoiceKeyerButtonLabel_();
+        int captureCurrentMicGroupTab_();
         
         void onFrequencyModeChange_(IRigFrequencyController*, uint64_t freq, IRigFrequencyController::Mode mode);
         void onRadioConnected_(IRigController* ptr);

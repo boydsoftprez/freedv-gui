@@ -74,6 +74,7 @@ class OptionsDlg : public wxDialog
         void    OnFreqModeChangeEnable(wxCommandEvent& event);
         void    OnEnableSpacebarForPTT(wxCommandEvent& event);
         void    OnSetPTTKey(wxCommandEvent& event);
+        void    OnTOTTimerEnable(wxCommandEvent& event);
         void    OnDialogCharHook(wxKeyEvent& event);
         void    OnPTTKeyCapture(wxKeyEvent& event);
         void    enterPTTCaptureMode_();
@@ -98,12 +99,17 @@ class OptionsDlg : public wxDialog
         wxRadioButton *m_ckboxEnableFreqChangesOnly;
         wxRadioButton *m_ckboxNoFreqModeChanges;
         wxCheckBox    *m_ckboxEnableSpacebarForPTT;
+        wxCheckBox    *m_ckboxPTTMomentaryMode;
         wxTextCtrl    *m_txtPTTKeyName;
         wxButton      *m_btnSetPTTKey;
         int            m_selectedPTTKeyCode;
         bool           m_capturingPTTKey;
         wxTextCtrl    *m_txtTxRxDelayMilliseconds;
         wxCheckBox    *m_ckboxFrequencyEntryAsKHz;
+
+        /* Time-Out Timer options */
+        wxCheckBox    *m_ckboxTOTTimerEnabled;
+        wxTextCtrl    *m_txtTOTTimerSecs;
         
         /* Waterfall color */
         wxRadioButton *m_waterfallColorScheme1; // Multicolored
@@ -163,6 +169,7 @@ class OptionsDlg : public wxDialog
         
         wxCheckBox    *m_ckboxFreeDVReporterEnable;
         wxTextCtrl    *m_freedvReporterHostname;
+        wxCheckBox    *m_ckboxFreeDVReporterUseTls;
         wxCheckBox    *m_useMetricDistances;
         wxCheckBox    *m_useCardinalDirections;
         wxCheckBox    *m_ckboxFreeDVReporterForceReceiveOnly;

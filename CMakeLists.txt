@@ -116,7 +116,7 @@ if(APPLE)
     set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -g")
 endif(APPLE)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -283,9 +283,9 @@ endif(USE_STATIC_DEPS)
 if (LINUX)
     message(STATUS "Looking for DBus...")
     find_package(DBus)
-    if (DBUS_FOUND)
+    if (DBus_FOUND)
         message(STATUS "Found DBus, will attempt to use rtkit for real-time threading")
-    endif (DBUS_FOUND)
+    endif (DBus_FOUND)
 endif (LINUX)
 
 #

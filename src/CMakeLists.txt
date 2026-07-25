@@ -111,6 +111,33 @@ if(LINUX AND STATIC_LIBGCC)
     target_link_options(freedv PRIVATE -static-libgcc -static-libstdc++)
 endif(LINUX AND STATIC_LIBGCC)
 
+# On Linux/GTK builds, make the GTK3 headers directly accessible in main.cpp
+# for the button-flash suppression code.
+if(LINUX)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GTK3 QUIET gtk+-3.0)
+        if(GTK3_FOUND)
+            message(STATUS "GTK3 development files found, will implement Linux-specific GUI workarounds")
+            target_include_directories(freedv PRIVATE ${GTK3_INCLUDE_DIRS})
+            target_link_libraries(freedv ${GTK3_LIBRARIES})
+            add_definitions(-DHAS_GTK3)
+
+            # fdv_gui_util (added via add_subdirectory(gui) above, before this
+            # point) needs these too -- WindowPositionRestore.cpp lives there,
+            # not in freedv's own sources. add_definitions()/directory-scoped
+            # include dirs only propagate to subdirectories added *after* this
+            # point, so it has to be set on the already-created target directly.
+            target_compile_definitions(fdv_gui_util PRIVATE HAS_GTK3)
+            target_include_directories(fdv_gui_util PRIVATE ${GTK3_INCLUDE_DIRS})
+        else(GTK3_FOUND)
+            message(WARNING "GTK3 development files (gtk+-3.0.pc, e.g. package libgtk-3-dev) not found -- Linux-specific GUI workarounds (including window position restore) will be disabled")
+        endif(GTK3_FOUND)
+    else(PkgConfig_FOUND)
+        message(WARNING "pkg-config not found -- cannot detect GTK3 development files, Linux-specific GUI workarounds (including window position restore) will be disabled")
+    endif(PkgConfig_FOUND)
+endif(LINUX)
+
 # If a release tag's set, pass it to the compiler.
 if(FREEDV_VERSION_TAG)
 add_definitions(-DFREEDV_VERSION_TAG="${FREEDV_VERSION_TAG}")

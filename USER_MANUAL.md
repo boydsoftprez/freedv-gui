@@ -260,9 +260,12 @@ a poor SNR at the receiver.  This is a very common problem.
      auto-saved value for that band, useful for recovering a known good level
      after experimenting during a session.
     
-   Within the TX Attenuation dialog there is also a Tune button which will output a continuous single tone at 1500Hz for antenna matching, netting etc.
-   The level of this signal while active may also be adjusted using the same controls as for the TX Attenuation.
-   Right click on the tune button to see a different context menu with similar options to the TX attenuation described above.
+   The **Control** panel (right-hand side) contains a **Tune** button which outputs a continuous 1500 Hz carrier for antenna matching, netting etc.
+   While Tune is active the TX Attenuation controls adjust the tune signal level rather than the normal transmit level.
+
+   Right-clicking the Tune button opens a context menu with the following options:
+   * **Set tune output to minimum (-30 dB)** — immediately sets the tune attenuation to its lowest output level without transmitting, useful for safe low-power antenna tuner testing.
+   * Per-band **Enable/Disable auto-save** and **Restore** options, similar to those described above for TX attenuation (shown only when a band is known).
    
    FreeDV will automatically detect band changes (via Hamlib or OmniRig CAT, or manual
    frequency entry) and load any saved attenuation value for the new band.
@@ -312,7 +315,7 @@ For reference, the channel widths of the currently supported modes are below:
 The Voice Keyer Button on the front page puts FreeDV and your radio into 
 transmit, reads a wave file of your voice to call CQ, and then switches to 
 receive to see if anyone is replying.  If you press the space bar or click
-the PTT button, the voice keyer stops.  If a signal with a valid sync is 
+the XMIT button, the voice keyer stops.  If a signal with a valid sync is 
 received for a few seconds the voice keyer also stops.
 
 The Audio tab inside Tools-Options can be used to select the wave file, set 
@@ -328,7 +331,7 @@ Additional options are also available if you right-click on the Voice Keyer butt
 
 FreeDV has the ability to monitor transmit audio. This can be useful for adjusting 
 microphone filters when your radio is plugged into a dummy load. To enable this,
-right-click on the PTT button and choose "Monitor transmitted audio". A checkmark
+right-click on the XMIT button and choose "Monitor transmitted audio". A checkmark
 will appear next to this menu option when enabled.
 
 # Quick Record
@@ -467,6 +470,16 @@ from the FreeDV Reporter servers in the dialog box.
 The last selected logging source (either the FreeDV Reporter window or the drop-down callsign list at the bottom
 of the main window) is used for auto-filling of logging data. This is to avoid confusion (for instance, if a row 
 in the main window is selected but it's intended to log from FreeDV Reporter instead).
+
+# Time-Out Timer (TOT)
+
+FreeDV contains a built-in time-out timer (TOT) that prevents the radio from transmitting for longer than the configured
+period. By default, this is enabled and set to 180 seconds (3 minutes). Fifteen seconds prior to the timeout firing,
+a window will appear along with a beep in your configured speakers or headset to allow you to either reset the timer
+or finish up your transmission. 
+
+If you desire a different timeout or want to disable the TOT, you can do so by going to Tools->Options->Rig Control
+and changing the TOT related options in that tab.
 
 # FreeDV Modes
 
@@ -826,7 +839,7 @@ Verify audio device settings in FreeDV. If your audio settings are correct,
 there are a few other possibilities:
 
 1. If on Windows, make sure all audio effects are disabled on all devices used with FreeDV.
-2. Turn off TX monitoring (right-click on PTT button and make sure "Monitor transmitted audio" is unchecked).
+2. Turn off TX monitoring (right-click on XMIT button and make sure "Monitor transmitted audio" is unchecked).
 
 ## The signal is strong but FreeDV won't get sync and decode
 
@@ -937,13 +950,41 @@ LDPC | Low Density Parity Check Codes - a family of powerful FEC codes
 ## V2.4.0 TBD 2026
 
 1. Bugfixes:
-    * Hamlib: Allow one timeout during connection process to allow Icom marine radios to behave better. (PR #1369)
+    * Hamlib: Allow two timeouts during connection process to allow Icom marine radios to behave better. (PR #1369, #1388)
     * Rename sanitizers.h->freedv_sanitizers.h due to name conflicts. (PR #1372)
     * Fix intermittent non-response to short PTT clicks to stop TX. (PR #1375) - thanks @barjac!
+    * Revert to libsamplerate library to fix remaining audio quality issues. (PR #1379)
+    * Right-justify SNR column in FreeDV Reporter to improve appearance. (PR #1387) - thanks @barjac!
+    * Hamlib: Set frequency again on mode changes. (PR #1395)
+    * Consolidate EOO length calculation in freedv-backend to improve callsign decode reliability. (PR #1402)
+    * Hamlib: Switch off memory channel before setting frequency/mode. (PR #1403) - thanks @barjac!
+    * Hamlib/OmniRig: Round received frequency to nearest 100 Hz. (PR #1373)
+    * Tighten remaining audio settings to improve audio drops. (PR #1412)
+    * Fix corruption of string config arrays containing commas. (PR #1417) - thanks @barjac!
+    * Suppress button flicker in Linux light themes. (PR #1419, PR #1421) - thanks @barjac!
+    * Only preserve previously selected tab on TX if it's in the same group as 'From Mic'. (PR #1428)
+    * Scalar plot label alignment fix for Y axis of Frm Decoder/Mic/Radio, SNR and Spectrum plots. (PR #1429) - thanks @barjac!
+    * Fix window position restore under KWin and labwc (main window + FreeDV Reporter window). (PR #1431, #1433) - thanks @barjac!
+    * Harden experimental tab layout persistence. (PR #1434) - thanks @barjac!
+    * Fix right-click context menus dismissing before they can be read (GTK) (PR #1437) - thanks @barjac!
 2. Enhancements:
     * Add UDP broadcast of received callsigns. (PR #1367)
+    * Add Time-Out Timer (TOT) capability to FreeDV. (PR #1366, #1398, #1405) - thanks @barjac!
     * Load last-used config file on restarts. (PR #1365, #1371)
-3. Other:
+    * Add "Set tune output to minimum" to Tune button context menu for safety. (PR #1378) - thanks @barjac!
+    * Move Tune button into Control widget for improved usability. (PR #1377) - thanks @barjac!
+    * Restore heard station list on launch. (PR #1358) - thanks @barjac!
+    * Add momentary PTT option to FreeDV. (PR #1393)
+    * Allow 8k sample rate for 'radio' devices. (PR #1416)
+    * FreeDV Reporter: Connect to server via TLS by default. (PR #1422, #1427)
+    * Block special characters in recording file name suffixes and default the voice keyer file selector to show .wav and .mp3. (PR #1424) - thanks @barjac!
+    * Fix Voice Keyer/PTT context menu positioning under native Wayland. (PR #1438) - thanks @barjac!
+3. Build system:
+    * Clear CMake deprecation warnings in FreeDV. (PR #1383, #1386)
+    * Upgrade Hamlib to 4.7.2. (PR #1413)
+    * Update wxWidgets to 3.3.3. (PR #1439)
+    * Require C++20 to build FreeDV. (PR #1440)
+4. Other:
     * FlexRadio/KA9Q integrations moved to freedv-integrations repo. (PR #1368)
 
 ## V2.3.1 May 2026

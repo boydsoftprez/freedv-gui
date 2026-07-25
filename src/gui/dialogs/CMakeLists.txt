@@ -7,11 +7,12 @@ add_library(fdv_gui_dialogs STATIC
     dlg_ptt.cpp
     freedv_reporter.cpp
     log_entry.cpp
-    monitor_volume_adj.cpp)
+    monitor_volume_adj.cpp
+    tot_warning.cpp)
 
 target_include_directories(fdv_gui_dialogs PRIVATE ${CODEC2_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/../.. ${CMAKE_CURRENT_BINARY_DIR}/../..)
 
-target_link_libraries(fdv_gui_dialogs PUBLIC r8brain fdv_gui_controls fdv_audio_pipeline_extra)
+target_link_libraries(fdv_gui_dialogs PUBLIC samplerate fdv_gui_controls fdv_audio_pipeline_extra)
 
 target_compile_options(fdv_gui_dialogs PRIVATE ${WARNINGS_AS_ERRORS_FLAGS})
 

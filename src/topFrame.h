@@ -78,6 +78,14 @@
 
 class wxListViewComboPopup;
 
+// Popup position for a right-click menu anchored to the left of btn (to
+// avoid running off the right screen edge on X11). On GTK/Wayland, GDK's
+// own popup placement already avoids screen edges correctly, and this
+// manual offset doesn't translate to Wayland's surface-relative anchor
+// model (it ends up placed at the toplevel's origin instead), so this
+// returns wxDefaultPosition there and lets GTK position it automatically.
+wxPoint LeftOffsetContextMenuPosition(wxWindow* btn);
+
 ///////////////////////////////////////////////////////////////////////////////
 /// Class TopFrame
 ///////////////////////////////////////////////////////////////////////////////
@@ -143,7 +151,7 @@ class TopFrame : public wxFrame
         wxRadioButton *m_rb1600;
 
         wxSizer* rightSizer;
-        
+
         wxStaticBox* modeBox;
         wxStaticBoxSizer* sbSizer_mode;
         
@@ -199,7 +207,7 @@ class TopFrame : public wxFrame
         virtual void OnTogBtnAnalogClick( wxCommandEvent& event ) { event.Skip(); }
         virtual void OnTogBtnVoiceKeyerClick( wxCommandEvent& event ) { event.Skip(); }
         virtual void OnTogBtnVoiceKeyerRightClick( wxContextMenuEvent& event ) { event.Skip(); }
-        
+
         virtual void OnTogBtnPTT( wxCommandEvent& event ) { event.Skip(); }
         virtual void OnTogBtnPTTRightClick( wxContextMenuEvent& event ) { event.Skip(); }
 
@@ -238,9 +246,7 @@ class TopFrame : public wxFrame
         virtual void OnReportFrequencyKillFocus(wxFocusEvent& event) { event.Skip(); }
 
         virtual void OnSystemColorChanged(wxSysColourChangedEvent& event) { event.Skip(); }
-        
-        virtual void OnNotebookPageChanging(wxAuiNotebookEvent& event) { event.Skip(); }
-        
+                
         virtual void OnResetMicSpkrLevel(wxMouseEvent& event) { event.Skip(); }
         
         virtual void OnRightClickCallsignList(wxMouseEvent& event) { event.Skip(); }
@@ -251,7 +257,7 @@ class TopFrame : public wxFrame
         virtual void OnToggleReporterVisibility (wxCommandEvent& event) { event.Skip(); }
         
         virtual void OnTogBtnTune(wxCommandEvent& event) { event.Skip(); }
-        
+
         void setVoiceKeyerButtonLabel_(wxString filename);
         
     public:

@@ -57,7 +57,8 @@ RigControlConfiguration::RigControlConfiguration()
     , serialPTTInputPolarityCTS("/Rig/CTSPolarity", false)
         
     , leftChannelVoxTone("/Rig/leftChannelVoxTone",  false)
-    , rigResponseTimeMicroseconds("/Rig/rigResponseTimeMicroseconds", 0)
+    , totTimerEnabled("/Rig/TotTimerEnabled", true)
+    , totTimerSecs("/Rig/TotTimerSecs", 180)
 {
     // empty
 }
@@ -106,7 +107,8 @@ void RigControlConfiguration::load(wxConfigBase* config)
     
     load_(config, leftChannelVoxTone);
 
-    load_(config, rigResponseTimeMicroseconds);
+    load_(config, totTimerEnabled);
+    load_(config, totTimerSecs);
 }
 
 void RigControlConfiguration::save(wxConfigBase* config)
@@ -147,5 +149,6 @@ void RigControlConfiguration::save(wxConfigBase* config)
     
     save_(config, leftChannelVoxTone);
 
-    save_(config, rigResponseTimeMicroseconds);
+    save_(config, totTimerEnabled);
+    save_(config, totTimerSecs);
 }

@@ -1,7 +1,8 @@
 set(FDV_GUI_UTIL_SOURCES
     LabelOverrideAccessible.cpp
     NameOverrideAccessible.cpp
-    wxListViewComboPopup.cpp)
+    wxListViewComboPopup.cpp
+    WindowPositionRestore.cpp)
 
 if(APPLE)
     list(APPEND FDV_GUI_UTIL_SOURCES MacStaticBox.mm)
