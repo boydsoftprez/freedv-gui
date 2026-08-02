@@ -1,7 +1,22 @@
 name: TCI Tests
 
-# Regression gate for the 6 TCI unit tests across Linux, macOS, and Windows.
+# Regression gate for the 6 TCI unit tests, on Linux and macOS.
 # Triggers on the TCI port branch and on any PR targeting master.
+#
+# There is deliberately no Windows job here. One existed against MSYS2 and never
+# passed: MSYS2 dropped hamlib entirely, does not publish wxWidgets 3.3 for the
+# mingw64 repo, and its CLANG64 toolchain has no mingw32-make, while Ninja is
+# ruled out by the BUILD_COMMAND $(MAKE) in cmake/BuildHamlib.cmake. Upstream
+# does not build Windows natively either -- cmake-windows.yml cross-compiles
+# from ubuntu with llvm-mingw -- so the native lane was chasing a configuration
+# nobody maintains.
+#
+# Windows coverage is not lost: the Build FreeDV (Windows) workflow still builds
+# the whole application via upstream's cross-compile path. Nor is TCI coverage
+# lost, since all six unit tests run on both jobs below, and
+# TciWebSocketClientTest is a no-op on Windows anyway (its main is guarded by
+# #if !defined(_WIN32)). Restore a Windows lane by mirroring cmake-windows.yml,
+# not by reviving the MSYS2 approach.
 
 on:
   push:
@@ -121,104 +136,4 @@ jobs:
 
       - name: Run TCI tests
         working-directory: build_osx
-        run: ctest -R '^(audio_Tci|rig_control_Tci)' --output-on-failure -V
-
-  # ---------------------------------------------------------------------------
-  # Windows: windows-latest, MSYS2/CLANG64 toolchain.
-  # Provides autotools + portaudio headers without cross-compilation.
-  # The existing cmake-windows.yml cross-compiles from Linux; this is the first
-  # native Windows build lane in the project. It has never yet gone green.
-  #
-  # CLANG64 rather than MINGW64, for two independent reasons:
-  #
-  #  1. MINGW64's toolchain is GCC, which cannot build this project at all --
-  #     see the ubuntu job above. websocketpp 0.8.2 does not parse under GCC at
-  #     C++20, and upstream has mandated C++20 since #1440. CLANG64 gives clang,
-  #     which accepts it.
-  #  2. wxWidgets 3.3 is not published for the mingw64 repo. CMakeLists.txt now
-  #     pins WXWIDGETS_VERSION 3.3.3 (cmake/BuildWxWidgets.cmake:1), and MSYS2
-  #     ships mingw-w64-clang-x86_64-wxwidgets3.3 at exactly 3.3.3 in clang64
-  #     (also in ucrt64). Installing it lets -DBOOTSTRAP_WXWIDGETS=OFF actually
-  #     be honoured; previously find_package(wxWidgets) failed, CMake fell back
-  #     to cloning wxWidgets, and the populate/patch step errored out.
-  #
-  # NOTE: hamlib was dropped from the MSYS2 repos entirely (no build in any
-  # repo), which is what broke this job at the pacman step ("target not found").
-  # It is deliberately absent from the install list -- with no system Hamlib,
-  # the CMakeLists.txt find_path/find_library probe fails and falls through to
-  # cmake/BuildHamlib.cmake, which builds it from source (applying
-  # cmake/hamlib-windows.patch). That costs build time but needs no pinned
-  # third-party package. Re-add it here if MSYS2 ever restores it.
-  #
-  # TciWebSocketClientTest exits 0 on Windows (no-op main guarded by
-  # #if !defined(_WIN32)) -- counted as a pass by ctest.
-  # ---------------------------------------------------------------------------
-  windows:
-    runs-on: windows-latest
-
-    defaults:
-      run:
-        shell: msys2 {0}
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Set up MSYS2 with CLANG64 toolchain and dependencies
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: CLANG64
-          update: true
-          install: >-
-            mingw-w64-clang-x86_64-toolchain
-            mingw-w64-clang-x86_64-cmake
-            mingw-w64-clang-x86_64-ninja
-            mingw-w64-clang-x86_64-wxwidgets3.3
-            mingw-w64-clang-x86_64-portaudio
-            mingw-w64-clang-x86_64-libsndfile
-            mingw-w64-clang-x86_64-speexdsp
-            mingw-w64-clang-x86_64-libebur128
-            autoconf
-            automake
-            libtool
-            make
-
-      - name: Configure
-        run: |
-          clang++ --version
-          # "Unix Makefiles", not Ninja and not "MinGW Makefiles":
-          #   * Ninja breaks on cmake/BuildHamlib.cmake, which uses
-          #     BUILD_COMMAND $(MAKE). That is a Make-only jobserver construct;
-          #     under Ninja it lands in build.ninja as a literal $ and errors with
-          #     "bad $-escape (literal $ must be written as $$)". Since MSYS2 has
-          #     no hamlib package, that ExternalProject always runs here.
-          #   * "MinGW Makefiles" needs mingw32-make, which the CLANG64 toolchain
-          #     group does not ship (clang/lld based).
-          # The msys "make" in the install list drives Unix Makefiles, and is also
-          # what the autotools-based ExternalProjects expect.
-          cmake -B build_windows \
-            -G "Unix Makefiles" \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DUNITTEST=ON \
-            -DUSE_NATIVE_AUDIO=OFF \
-            -DUSE_STATIC_PORTAUDIO=OFF \
-            -DUSE_STATIC_SNDFILE=OFF \
-            -DUSE_STATIC_SPEEXDSP=OFF \
-            -DBOOTSTRAP_WXWIDGETS=OFF \
-            .
-
-      - name: Build TCI test targets
-        run: |
-          cmake --build build_windows --target \
-            TciProtocolTest \
-            TciMoxGateTest \
-            TciReconnectTest \
-            TciWebSocketClientTest \
-            TciAudioFrameTest \
-            TciDeviceNamingTest \
-            -j$(nproc)
-
-      - name: Run TCI tests
-        working-directory: build_windows
         run: ctest -R '^(audio_Tci|rig_control_Tci)' --output-on-failure -V
