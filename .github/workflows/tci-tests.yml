@@ -103,9 +103,17 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Windows: windows-latest, MSYS2/MinGW64 toolchain.
-  # Provides autotools + hamlib + portaudio headers without cross-compilation.
+  # Provides autotools + portaudio headers without cross-compilation.
   # The existing cmake-windows.yml cross-compiles from Linux; this is the first
   # native Windows build lane in the project.
+  #
+  # NOTE: mingw-w64-x86_64-hamlib was dropped from the MSYS2 repos, which broke
+  # this job at the pacman step ("target not found"). It is deliberately not in
+  # the install list below -- with no system Hamlib present, the top-level
+  # CMakeLists.txt find_path/find_library probe fails and falls through to
+  # cmake/BuildHamlib.cmake, which builds Hamlib from source (applying
+  # cmake/hamlib-windows.patch). That costs build time but needs no pinned
+  # third-party package. Re-add the package here if MSYS2 ever restores it.
   #
   # TciWebSocketClientTest exits 0 on Windows (no-op main guarded by
   # #if !defined(_WIN32)) -- counted as a pass by ctest.
@@ -131,7 +139,6 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-hamlib
             mingw-w64-x86_64-portaudio
             mingw-w64-x86_64-libsndfile
             mingw-w64-x86_64-speexdsp
