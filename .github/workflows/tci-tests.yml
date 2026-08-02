@@ -187,11 +187,18 @@ jobs:
       - name: Configure
         run: |
           clang++ --version
-          # Ninja rather than "MinGW Makefiles": the CLANG64 toolchain group is
-          # built around clang/lld and does not ship mingw32-make, which that
-          # generator requires. Ninja is installed above and is generator-neutral.
+          # "Unix Makefiles", not Ninja and not "MinGW Makefiles":
+          #   * Ninja breaks on cmake/BuildHamlib.cmake, which uses
+          #     BUILD_COMMAND $(MAKE). That is a Make-only jobserver construct;
+          #     under Ninja it lands in build.ninja as a literal $ and errors with
+          #     "bad $-escape (literal $ must be written as $$)". Since MSYS2 has
+          #     no hamlib package, that ExternalProject always runs here.
+          #   * "MinGW Makefiles" needs mingw32-make, which the CLANG64 toolchain
+          #     group does not ship (clang/lld based).
+          # The msys "make" in the install list drives Unix Makefiles, and is also
+          # what the autotools-based ExternalProjects expect.
           cmake -B build_windows \
-            -G Ninja \
+            -G "Unix Makefiles" \
             -DCMAKE_BUILD_TYPE=Debug \
             -DUNITTEST=ON \
             -DUSE_NATIVE_AUDIO=OFF \
