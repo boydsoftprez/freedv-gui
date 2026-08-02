@@ -124,18 +124,31 @@ jobs:
         run: ctest -R '^(audio_Tci|rig_control_Tci)' --output-on-failure -V
 
   # ---------------------------------------------------------------------------
-  # Windows: windows-latest, MSYS2/MinGW64 toolchain.
+  # Windows: windows-latest, MSYS2/CLANG64 toolchain.
   # Provides autotools + portaudio headers without cross-compilation.
   # The existing cmake-windows.yml cross-compiles from Linux; this is the first
-  # native Windows build lane in the project.
+  # native Windows build lane in the project. It has never yet gone green.
   #
-  # NOTE: mingw-w64-x86_64-hamlib was dropped from the MSYS2 repos, which broke
-  # this job at the pacman step ("target not found"). It is deliberately not in
-  # the install list below -- with no system Hamlib present, the top-level
-  # CMakeLists.txt find_path/find_library probe fails and falls through to
-  # cmake/BuildHamlib.cmake, which builds Hamlib from source (applying
+  # CLANG64 rather than MINGW64, for two independent reasons:
+  #
+  #  1. MINGW64's toolchain is GCC, which cannot build this project at all --
+  #     see the ubuntu job above. websocketpp 0.8.2 does not parse under GCC at
+  #     C++20, and upstream has mandated C++20 since #1440. CLANG64 gives clang,
+  #     which accepts it.
+  #  2. wxWidgets 3.3 is not published for the mingw64 repo. CMakeLists.txt now
+  #     pins WXWIDGETS_VERSION 3.3.3 (cmake/BuildWxWidgets.cmake:1), and MSYS2
+  #     ships mingw-w64-clang-x86_64-wxwidgets3.3 at exactly 3.3.3 in clang64
+  #     (also in ucrt64). Installing it lets -DBOOTSTRAP_WXWIDGETS=OFF actually
+  #     be honoured; previously find_package(wxWidgets) failed, CMake fell back
+  #     to cloning wxWidgets, and the populate/patch step errored out.
+  #
+  # NOTE: hamlib was dropped from the MSYS2 repos entirely (no build in any
+  # repo), which is what broke this job at the pacman step ("target not found").
+  # It is deliberately absent from the install list -- with no system Hamlib,
+  # the CMakeLists.txt find_path/find_library probe fails and falls through to
+  # cmake/BuildHamlib.cmake, which builds it from source (applying
   # cmake/hamlib-windows.patch). That costs build time but needs no pinned
-  # third-party package. Re-add the package here if MSYS2 ever restores it.
+  # third-party package. Re-add it here if MSYS2 ever restores it.
   #
   # TciWebSocketClientTest exits 0 on Windows (no-op main guarded by
   # #if !defined(_WIN32)) -- counted as a pass by ctest.
@@ -152,19 +165,20 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up MSYS2 with MinGW64 toolchain and dependencies
+      - name: Set up MSYS2 with CLANG64 toolchain and dependencies
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: CLANG64
           update: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-portaudio
-            mingw-w64-x86_64-libsndfile
-            mingw-w64-x86_64-speexdsp
-            mingw-w64-x86_64-libebur128
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-wxwidgets3.3
+            mingw-w64-clang-x86_64-portaudio
+            mingw-w64-clang-x86_64-libsndfile
+            mingw-w64-clang-x86_64-speexdsp
+            mingw-w64-clang-x86_64-libebur128
             autoconf
             automake
             libtool
@@ -172,8 +186,12 @@ jobs:
 
       - name: Configure
         run: |
+          clang++ --version
+          # Ninja rather than "MinGW Makefiles": the CLANG64 toolchain group is
+          # built around clang/lld and does not ship mingw32-make, which that
+          # generator requires. Ninja is installed above and is generator-neutral.
           cmake -B build_windows \
-            -G "MinGW Makefiles" \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DUNITTEST=ON \
             -DUSE_NATIVE_AUDIO=OFF \
